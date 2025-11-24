@@ -3,15 +3,17 @@ import { Button, Input, FormSection } from "../components/common";
 import { useForm } from "../hooks/useForm";
 import { useNavigation } from "../hooks/useNavigation";
 import { useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { text } from "../constants";
 import { isValidEmail } from "../utils/validation";
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, GoogleAuthProvider, getRedirectResult } from "firebase/auth";
 import { auth, firestore } from "../config/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export default function LoginPage() {
   const { navigate, goToSignup } = useNavigation();
   const location = useLocation();
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   const { values, errors, handleChange, handleBlur, validate } = useForm(
     { id: "", password: "" },
@@ -49,69 +51,109 @@ export default function LoginPage() {
     }
   };
 
+  // 리디렉션 결과 처리 (페이지 로드 시)
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const user = result.user;
+          await saveUserToFirestore(user);
+          
+          const returnTo = location.state?.returnTo || "/";
+          navigate(returnTo);
+        }
+      } catch (error) {
+        console.error("리디렉션 결과 처리 실패:", error);
+        handleGoogleLoginError(error);
+      }
+    };
+    
+    handleRedirectResult();
+  }, []);
+
+  const saveUserToFirestore = async (user) => {
+    const email = user.email;
+    const displayName = user.displayName;
+    const photoURL = user.photoURL;
+    const uid = user.uid;
+    
+    try {
+      const userRef = doc(firestore, "users", uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        // 신규 사용자인 경우 정보 저장
+        await setDoc(userRef, {
+          email,
+          displayName: displayName || null,
+          photoURL: photoURL || null,
+          createdAt: Date.now(),
+          provider: "google",
+          lastLoginAt: Date.now(),
+          nickname: displayName || null, // 구글 로그인 시 displayName을 닉네임으로 사용
+        });
+        console.log("사용자 정보가 Firestore에 저장되었습니다.");
+      } else {
+        // 기존 사용자인 경우 마지막 로그인 시간만 업데이트
+        await setDoc(userRef, {
+          lastLoginAt: Date.now(),
+        }, { merge: true });
+      }
+    } catch (firestoreError) {
+      console.error("Firestore 저장 실패:", firestoreError);
+      // Firestore 저장 실패해도 로그인은 계속 진행
+    }
+  };
+
+  const handleGoogleLoginError = (error) => {
+    console.error("구글 로그인 실패:", error);
+    let errorMessage = "구글 로그인에 실패했습니다.";
+    
+    if (error?.code === "auth/popup-closed-by-user") {
+      errorMessage = "로그인 창이 닫혔습니다.";
+    } else if (error?.code === "auth/popup-blocked") {
+      errorMessage = "팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용해주세요.";
+    } else if (error?.code === "auth/account-exists-with-different-credential") {
+      errorMessage = "이미 다른 방법으로 가입된 계정입니다.";
+    } else if (error?.code === "auth/operation-not-allowed") {
+      errorMessage = "구글 로그인이 활성화되지 않았습니다. 관리자에게 문의해주세요.";
+    } else if (error?.code === "auth/unauthorized-domain") {
+      errorMessage = "이 도메인에서는 구글 로그인을 사용할 수 없습니다.";
+    } else if (error?.message) {
+      errorMessage = `구글 로그인 실패: ${error.message}`;
+    }
+    
+    alert(errorMessage);
+    setIsGoogleLoading(false);
+  };
+
   const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      // 구글 로그인 팝업 열기
-      const result = await signInWithPopup(auth, provider);
       
-      // 사용자 정보 가져오기
-      const user = result.user;
-      const email = user.email;
-      const displayName = user.displayName;
-      const photoURL = user.photoURL;
-      const uid = user.uid;
+      // 모바일 환경 감지
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
-      console.log("Google 로그인 성공:", {
-        email,
-        displayName,
-        photoURL,
-        uid,
-      });
-      
-      // Firestore에 사용자 정보 저장 (처음 로그인한 경우만)
-      try {
-        const userRef = doc(firestore, "users", uid);
-        const userSnap = await getDoc(userRef);
+      if (isMobile) {
+        // 모바일에서는 리디렉션 사용
+        await signInWithRedirect(auth, provider);
+        // 리디렉션 후 useEffect에서 결과 처리
+      } else {
+        // 데스크톱에서는 팝업 사용
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
         
-        if (!userSnap.exists()) {
-          // 신규 사용자인 경우 정보 저장
-          await setDoc(userRef, {
-            email,
-            displayName: displayName || null,
-            photoURL: photoURL || null,
-            createdAt: Date.now(),
-            provider: "google",
-            lastLoginAt: Date.now(),
-          });
-          console.log("사용자 정보가 Firestore에 저장되었습니다.");
-        } else {
-          // 기존 사용자인 경우 마지막 로그인 시간만 업데이트
-          await setDoc(userRef, {
-            lastLoginAt: Date.now(),
-          }, { merge: true });
-        }
-      } catch (firestoreError) {
-        console.error("Firestore 저장 실패:", firestoreError);
-        // Firestore 저장 실패해도 로그인은 계속 진행
+        await saveUserToFirestore(user);
+        
+        // 로그인 성공 시 returnTo가 있으면 그곳으로, 없으면 홈으로 이동
+        const returnTo = location.state?.returnTo || "/";
+        navigate(returnTo);
+        setIsGoogleLoading(false);
       }
-      
-      // 로그인 성공 시 returnTo가 있으면 그곳으로, 없으면 홈으로 이동
-      const returnTo = location.state?.returnTo || "/";
-      navigate(returnTo);
     } catch (error) {
-      console.error("구글 로그인 실패:", error);
-      let errorMessage = "구글 로그인에 실패했습니다.";
-      
-      if (error.code === "auth/popup-closed-by-user") {
-        errorMessage = "로그인 창이 닫혔습니다.";
-      } else if (error.code === "auth/popup-blocked") {
-        errorMessage = "팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용해주세요.";
-      } else if (error.code === "auth/account-exists-with-different-credential") {
-        errorMessage = "이미 다른 방법으로 가입된 계정입니다.";
-      }
-      
-      alert(errorMessage);
+      handleGoogleLoginError(error);
     }
   };
 
@@ -156,7 +198,12 @@ export default function LoginPage() {
 
           <button
             onClick={handleGoogleLogin}
-            className="bg-white border border-[#e0e0e0] h-[55px] flex items-center justify-center gap-3 px-4 rounded-xl w-full hover:bg-gray-50 transition-colors"
+            disabled={isGoogleLoading}
+            className={`bg-white border border-[#e0e0e0] h-[55px] flex items-center justify-center gap-3 px-4 rounded-xl w-full transition-colors ${
+              isGoogleLoading 
+                ? "opacity-50 cursor-not-allowed" 
+                : "hover:bg-gray-50"
+            }`}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -176,7 +223,9 @@ export default function LoginPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            <span className="font-semibold text-base text-[#1a1a1a]">Google로 로그인</span>
+            <span className="font-semibold text-base text-[#1a1a1a]">
+              {isGoogleLoading ? "로그인 중..." : "Google로 로그인"}
+            </span>
           </button>
         </FormSection>
 
