@@ -155,14 +155,23 @@ export default function SettlementMenuSelectionPage() {
       });
 
       // 각 메뉴 항목의 참여자 수 계산 및 업데이트
-      // 모든 참여자의 선택을 기반으로 계산
+      // completed: true인 참여자의 선택을 기반으로 계산
       const allParticipants = Object.values(roomData.participants || {});
+      const completedParticipants = allParticipants.filter(p => p.completed === true);
       const menuUpdates = {};
       
       menuItems.forEach((menuItem) => {
-        // 이 메뉴를 선택한 참여자 수 계산
-        const selectedParticipants = allParticipants.filter(
-          (p) => p.selectedMenuIds?.includes(menuItem.id)
+        // 이 메뉴를 선택한 참여자 수 계산 (completed: true인 참여자만)
+        // selectedMenuIds가 null이거나 배열이 아닌 경우 처리
+        const selectedParticipants = completedParticipants.filter(
+          (p) => {
+            const selectedIds = p.selectedMenuIds;
+            // null이거나 배열이 아니면 false
+            if (!selectedIds || !Array.isArray(selectedIds)) {
+              return false;
+            }
+            return selectedIds.includes(menuItem.id);
+          }
         ).length;
         
         const participantCount = selectedParticipants;

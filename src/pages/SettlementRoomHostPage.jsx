@@ -286,8 +286,7 @@ export default function SettlementRoomHostPage() {
           {menuItemsState.map((item) => (
             <div
               key={item.id}
-              onClick={() => handleMenuToggle(item.id)}
-              className="bg-white border border-snow h-20 relative rounded-[10px] shrink-0 w-full cursor-pointer hover:bg-gray-50 transition-colors"
+              className="bg-white border border-snow h-20 relative rounded-[10px] shrink-0 w-full"
             >
               <div className="flex flex-col h-20 items-start overflow-hidden pb-4 pt-0 px-4 rounded-[inherit] w-full">
                 {/* Top Row */}
@@ -301,12 +300,8 @@ export default function SettlementRoomHostPage() {
                       )}
                     </p>
                   </div>
-                  {/* Checkbox */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMenuToggle(item.id);
-                    }}
+                  {/* Checkbox - 방장은 선택 불가 (읽기 전용) */}
+                  <div
                     className={`flex items-center justify-center p-1 rounded-[5px] shrink-0 size-6 ${
                       item.isSelected
                         ? "bg-[#3366cc]"
@@ -316,7 +311,7 @@ export default function SettlementRoomHostPage() {
                     {item.isSelected && (
                       <p className="font-semibold text-sm text-white">✓</p>
                     )}
-                  </button>
+                  </div>
                 </div>
 
                 {/* Participant Chips */}
