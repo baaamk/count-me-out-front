@@ -4,6 +4,10 @@
       "$roomId": {
         ".read": true,
         ".write": true,
+        // 규칙에 정의되지 않은 필드도 허용 (개발 편의성)
+        "$other": {
+          ".validate": true
+        },
         "id": {
           ".validate": "newData.isString() && newData.val().length > 0"
         },

@@ -165,7 +165,7 @@ export default function Step3PaymentInfoPage() {
         createdAt: Date.now(),
         host: {
           nickname: nickname.trim(),
-          kakaoPayCode: kakaoPayCode.trim() || null,
+          kakaoPayCode: (kakaoPayCode && kakaoPayCode.trim()) ? kakaoPayCode.trim() : null,
           bank: bank,
           accountNumber: accountNumber,
         },
@@ -184,7 +184,7 @@ export default function Step3PaymentInfoPage() {
           [nickname.trim()]: {
             nickname: nickname.trim(),
             isHost: true,
-            selectedMenuIds: [],
+            selectedMenuIds: null, // 빈 배열 대신 null 사용 (규칙에서 hasChildren() 검증)
             completed: false,
             joinedAt: Date.now(),
             uid: auth.currentUser?.uid || null, // 로그인한 사용자의 UID 저장 (선택사항)
@@ -195,6 +195,7 @@ export default function Step3PaymentInfoPage() {
         status: "active", // active, completed
       };
       
+      console.log("저장할 데이터:", JSON.stringify(roomData, null, 2));
       await set(roomRef, roomData);
       console.log("정산 방 생성 완료:", roomId);
       
