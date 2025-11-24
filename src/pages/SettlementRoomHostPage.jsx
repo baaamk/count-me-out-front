@@ -29,8 +29,15 @@ export default function SettlementRoomHostPage() {
     const unsubscribe = onValue(roomRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+        const menuItemsArray = Array.isArray(data.menuItems)
+          ? data.menuItems
+          : data.menuItems
+          ? Object.values(data.menuItems)
+          : [];
+        
         // 메뉴 항목과 참여자 정보 결합
-        const menuItemsWithParticipants = (data.menuItems || []).map((menuItem, index) => {
+        const menuItemsWithParticipants = menuItemsArray.map((menuItem, index) => {
           const participants = Object.values(data.participants || {}).map((participant) => {
             const isSelected = participant.selectedMenuIds?.includes(menuItem.id) || false;
             return {
@@ -165,16 +172,23 @@ export default function SettlementRoomHostPage() {
       const roomData = snapshot.val();
 
       if (roomData) {
+        // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+        const menuItemsArray = Array.isArray(roomData.menuItems)
+          ? roomData.menuItems
+          : roomData.menuItems
+          ? Object.values(roomData.menuItems)
+          : [];
+        
         // 모든 참여자의 Firestore에 정산 내역 저장
         const participants = Object.values(roomData.participants || {});
-        const totalAmount = (roomData.menuItems || []).reduce((sum, item) => sum + item.price, 0);
+        const totalAmount = menuItemsArray.reduce((sum, item) => sum + item.price, 0);
 
         for (const participant of participants) {
           if (participant.uid) {
             // 로그인한 사용자만 Firestore에 저장
             try {
               const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
-              const participantAmount = (roomData.menuItems || [])
+              const participantAmount = menuItemsArray
                 .filter((item) => participant.selectedMenuIds?.includes(item.id))
                 .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
 

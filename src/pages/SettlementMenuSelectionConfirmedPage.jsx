@@ -29,8 +29,15 @@ export default function SettlementMenuSelectionConfirmedPage() {
     const unsubscribe = onValue(roomRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+        const menuItemsArray = Array.isArray(data.menuItems)
+          ? data.menuItems
+          : data.menuItems
+          ? Object.values(data.menuItems)
+          : [];
+        
         // 메뉴 항목과 참여자 정보 결합
-        const menuItemsWithParticipants = (data.menuItems || []).map((menuItem) => {
+        const menuItemsWithParticipants = menuItemsArray.map((menuItem) => {
           const participants = Object.values(data.participants || {}).map((participant) => {
             const isSelected = participant.selectedMenuIds?.includes(menuItem.id) || false;
             return {

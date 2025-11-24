@@ -31,7 +31,13 @@ export default function SettlementMenuSelectionPage() {
     const unsubscribe = onValue(roomRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setMenuItems(data.menuItems || []);
+        // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+        const items = Array.isArray(data.menuItems)
+          ? data.menuItems
+          : data.menuItems
+          ? Object.values(data.menuItems)
+          : [];
+        setMenuItems(items);
         setTotalParticipants(data.totalParticipants || 0);
         setCurrentParticipants(data.currentParticipants || 0);
       }
@@ -89,7 +95,7 @@ export default function SettlementMenuSelectionPage() {
       const allParticipants = Object.values(roomData.participants || {});
       const menuUpdates = {};
       
-      menuItems.forEach((menuItem, index) => {
+      menuItems.forEach((menuItem) => {
         // 이 메뉴를 선택한 참여자 수 계산
         const selectedParticipants = allParticipants.filter(
           (p) => p.selectedMenuIds?.includes(menuItem.id)
@@ -100,8 +106,9 @@ export default function SettlementMenuSelectionPage() {
           ? Math.floor(menuItem.price / participantCount)
           : menuItem.price;
         
-        menuUpdates[`menuItems/${index}/participantCount`] = participantCount;
-        menuUpdates[`menuItems/${index}/pricePerPerson`] = pricePerPerson;
+        // menuItems는 객체 구조이므로 menuItem.id를 키로 사용
+        menuUpdates[`menuItems/${menuItem.id}/participantCount`] = participantCount;
+        menuUpdates[`menuItems/${menuItem.id}/pricePerPerson`] = pricePerPerson;
       });
 
       if (Object.keys(menuUpdates).length > 0) {

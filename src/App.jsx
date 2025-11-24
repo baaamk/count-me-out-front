@@ -38,6 +38,7 @@ const MyPage = lazy(() => import("./pages/MyPage"));
 const ProfileEditPage = lazy(() => import("./pages/ProfileEditPage"));
 const ChangePasswordPage = lazy(() => import("./pages/ChangePasswordPage"));
 const SettlementListPage = lazy(() => import("./pages/SettlementListPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 // 로딩 컴포넌트
 const LoadingFallback = () => (
@@ -101,6 +102,8 @@ export default function App() {
         <Route path="/mypage/profile/edit" element={<ProfileEditPage />} />
         <Route path="/mypage/password/change" element={<ChangePasswordPage />} />
         <Route path="/mypage/settlement/history" element={<SettlementListPage />} />
+        {/* 404 페이지 - 모든 라우트의 마지막에 배치 */}
+        <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

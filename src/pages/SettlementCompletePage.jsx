@@ -25,18 +25,25 @@ export default function SettlementCompletePage() {
         const roomData = snapshot.val();
 
         if (roomData) {
+          // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+          const menuItemsArray = Array.isArray(roomData.menuItems)
+            ? roomData.menuItems
+            : roomData.menuItems
+            ? Object.values(roomData.menuItems)
+            : [];
+          
           const participants = Object.values(roomData.participants || {});
           setSettlementData({
-            totalAmount: (roomData.menuItems || []).reduce((sum, item) => sum + item.price, 0),
+            totalAmount: menuItemsArray.reduce((sum, item) => sum + item.price, 0),
             participantCount: participants.length,
             date: new Date(roomData.createdAt).toLocaleDateString("ko-KR"),
             participants: participants.map((p) => ({
               name: p.nickname,
-              menuItems: (roomData.menuItems || [])
+              menuItems: menuItemsArray
                 .filter((item) => p.selectedMenuIds?.includes(item.id))
                 .map((item) => item.name)
                 .join(" + "),
-              amount: (roomData.menuItems || [])
+              amount: menuItemsArray
                 .filter((item) => p.selectedMenuIds?.includes(item.id))
                 .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0),
             })),

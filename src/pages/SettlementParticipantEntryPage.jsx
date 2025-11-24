@@ -83,7 +83,7 @@ export default function SettlementParticipantEntryPage() {
       await update(participantRef, {
         nickname: nickname.trim(),
         isHost: false,
-        selectedMenuIds: [],
+        selectedMenuIds: null, // 빈 배열 대신 null 사용
         completed: false,
         joinedAt: Date.now(),
         uid: currentUser?.uid || null, // 로그인한 사용자의 UID 저장 (선택사항)
@@ -96,7 +96,7 @@ export default function SettlementParticipantEntryPage() {
       });
 
       // 메뉴 선택 페이지로 이동
-      navigate("/settlement/room/menu-selection", {
+      navigate(`/settlement/room/${roomId}/menu-selection`, {
         state: { roomId, userNickname: nickname.trim() }
       });
     } catch (err) {

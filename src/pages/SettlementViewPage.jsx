@@ -54,8 +54,15 @@ export default function SettlementViewPage() {
         if (roomData) {
           const participants = Object.keys(roomData.participants || {});
           
+          // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+          const menuItemsArray = Array.isArray(roomData.menuItems)
+            ? roomData.menuItems
+            : roomData.menuItems
+            ? Object.values(roomData.menuItems)
+            : [];
+          
           // 실제 총액 계산
-          const totalAmount = (roomData.menuItems || []).reduce(
+          const totalAmount = menuItemsArray.reduce(
             (sum, item) => sum + (item.price || 0),
             0
           );

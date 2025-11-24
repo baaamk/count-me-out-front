@@ -44,8 +44,15 @@ export default function SettlementPaymentPage() {
           return;
         }
 
+        // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
+        const menuItemsArray = Array.isArray(roomData.menuItems)
+          ? roomData.menuItems
+          : roomData.menuItems
+          ? Object.values(roomData.menuItems)
+          : [];
+        
         // 선택한 메뉴 항목 계산
-        const selectedMenuItems = (roomData.menuItems || []).filter((item) =>
+        const selectedMenuItems = menuItemsArray.filter((item) =>
           participant.selectedMenuIds?.includes(item.id)
         );
 
