@@ -116,8 +116,27 @@ export default function SettlementRoomHostPage() {
     return () => unsubscribe();
   }, [roomId]);
 
-  const remainingParticipants = totalParticipants - currentParticipants;
-  const allParticipantsCompleted = remainingParticipants === 0; // 모든 참여자 완료 여부
+  // 모든 참여자가 메뉴 선택을 확정했는지 확인
+  const allParticipantsCompleted = roomData ? (() => {
+    const participants = Object.values(roomData.participants || {});
+    if (participants.length === 0) return false;
+    // 모든 참여자가 completed: true이고, selectedMenuIds가 null이 아니고 배열이며 길이가 0보다 큰지 확인
+    return participants.every(p => {
+      const isCompleted = p.completed === true;
+      const hasSelectedMenus = p.selectedMenuIds && Array.isArray(p.selectedMenuIds) && p.selectedMenuIds.length > 0;
+      return isCompleted && hasSelectedMenus;
+    });
+  })() : false;
+  
+  const remainingParticipants = roomData ? (() => {
+    const participants = Object.values(roomData.participants || {});
+    const completedCount = participants.filter(p => {
+      const isCompleted = p.completed === true;
+      const hasSelectedMenus = p.selectedMenuIds && Array.isArray(p.selectedMenuIds) && p.selectedMenuIds.length > 0;
+      return isCompleted && hasSelectedMenus;
+    }).length;
+    return participants.length - completedCount;
+  })() : totalParticipants - currentParticipants;
 
   // 초기 메뉴 데이터 (로딩 중일 때 사용)
   const initialMenuItems = [

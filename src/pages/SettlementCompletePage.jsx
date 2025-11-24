@@ -55,30 +55,46 @@ export default function SettlementCompletePage() {
             // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
             const calculatedPricePerPerson = confirmedCount > 0
               ? Math.floor((item.price || 0) / confirmedCount)
-              : item.price || 0;
+              : undefined;
             
             return {
               ...item,
               pricePerPerson: item.pricePerPerson ?? calculatedPricePerPerson,
+              confirmedCount: confirmedCount, // 참여자 수 저장
             };
           });
           
+          // 참여자별 금액 계산
+          const participantAmounts = participants.map((p) => {
+            // 참여자가 선택한 메뉴들의 pricePerPerson 합산
+            const selectedMenuIds = p.selectedMenuIds || [];
+            const amount = menuItemsWithPricePerPerson
+              .filter((item) => {
+                const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+                return selectedMenuIds.some(id => {
+                  const selectedId = typeof id === 'number' ? id : Number(id);
+                  return selectedId === itemId;
+                });
+              })
+              .reduce((sum, item) => {
+                // pricePerPerson이 있으면 사용, 없으면 0 (아직 계산 안됨)
+                return sum + (item.pricePerPerson || 0);
+              }, 0);
+            
+            return amount;
+          });
+          
+          // 총 합계는 참여자별 금액의 합계 (실제 정산된 금액)
+          const totalSettlementAmount = participantAmounts.reduce((sum, amount) => sum + amount, 0);
+          
           setSettlementData({
-            totalAmount: menuItemsArray.reduce((sum, item) => sum + item.price, 0),
+            totalAmount: totalSettlementAmount, // 참여자별 금액 합계로 변경
             participantCount: participants.length,
             date: new Date(roomData.createdAt).toLocaleDateString("ko-KR"),
-            participants: participants.map((p) => {
+            participants: participants.map((p, index) => {
               // 참여자가 선택한 메뉴들의 pricePerPerson 합산
               const selectedMenuIds = p.selectedMenuIds || [];
-              const amount = menuItemsWithPricePerPerson
-                .filter((item) => {
-                  const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
-                  return selectedMenuIds.some(id => {
-                    const selectedId = typeof id === 'number' ? id : Number(id);
-                    return selectedId === itemId;
-                  });
-                })
-                .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+              const amount = participantAmounts[index]; // 이미 계산된 금액 사용
               
               return {
                 name: p.nickname,
