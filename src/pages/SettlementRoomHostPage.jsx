@@ -118,24 +118,34 @@ export default function SettlementRoomHostPage() {
 
   // 모든 참여자가 메뉴 선택을 확정했는지 확인
   const allParticipantsCompleted = roomData ? (() => {
+    // Step1에서 지정한 총 참여자 수
+    const expectedTotalParticipants = roomData.totalParticipants || 0;
+    if (expectedTotalParticipants === 0) return false;
+    
     const participants = Object.values(roomData.participants || {});
-    if (participants.length === 0) return false;
-    // 모든 참여자가 completed: true이고, selectedMenuIds가 null이 아니고 배열이며 길이가 0보다 큰지 확인
-    return participants.every(p => {
+    
+    // completed: true이고 메뉴를 선택한 참여자 수 계산
+    const completedCount = participants.filter(p => {
       const isCompleted = p.completed === true;
       const hasSelectedMenus = p.selectedMenuIds && Array.isArray(p.selectedMenuIds) && p.selectedMenuIds.length > 0;
       return isCompleted && hasSelectedMenus;
-    });
+    }).length;
+    
+    // Step1에서 지정한 총 참여자 수와 완료한 참여자 수가 일치해야 함
+    return completedCount >= expectedTotalParticipants;
   })() : false;
   
   const remainingParticipants = roomData ? (() => {
+    // Step1에서 지정한 총 참여자 수
+    const expectedTotalParticipants = roomData.totalParticipants || 0;
     const participants = Object.values(roomData.participants || {});
     const completedCount = participants.filter(p => {
       const isCompleted = p.completed === true;
       const hasSelectedMenus = p.selectedMenuIds && Array.isArray(p.selectedMenuIds) && p.selectedMenuIds.length > 0;
       return isCompleted && hasSelectedMenus;
     }).length;
-    return participants.length - completedCount;
+    // Step1에서 지정한 총 참여자 수 기준으로 남은 인원 계산
+    return expectedTotalParticipants - completedCount;
   })() : totalParticipants - currentParticipants;
 
   // 초기 메뉴 데이터 (로딩 중일 때 사용)

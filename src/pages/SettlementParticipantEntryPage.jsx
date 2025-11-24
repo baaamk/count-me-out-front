@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import MobileLayout from "../layouts/MobileLayout";
 import { ParticipantEntryForm } from "../components/common";
-import { ref, get, update } from "firebase/database";
+import { ref, get, update, onDisconnect } from "firebase/database";
 import { database, auth } from "../config/firebase";
 
 export default function SettlementParticipantEntryPage() {
@@ -87,6 +87,13 @@ export default function SettlementParticipantEntryPage() {
         completed: false,
         joinedAt: Date.now(),
         uid: currentUser?.uid || null, // 로그인한 사용자의 UID 저장 (선택사항)
+      });
+      
+      // onDisconnect 설정: 연결이 끊어지면 자동으로 참여자 제거
+      // (단, completed: true가 아닌 경우에만)
+      onDisconnect(participantRef).remove().catch((error) => {
+        console.error("onDisconnect 설정 실패:", error);
+        // 실패해도 계속 진행 (선택사항 기능)
       });
 
       // 현재 참여자 수 업데이트

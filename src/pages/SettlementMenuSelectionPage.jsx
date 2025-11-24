@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import MobileLayout from "../layouts/MobileLayout";
-import { ref, get, update, onValue } from "firebase/database";
+import { ref, get, update, onValue, onDisconnect } from "firebase/database";
 import { database } from "../config/firebase";
 
 export default function SettlementMenuSelectionPage() {
@@ -14,6 +14,7 @@ export default function SettlementMenuSelectionPage() {
   const [loading, setLoading] = useState(true);
   const [showAllSelections, setShowAllSelections] = useState(false);
   const [roomData, setRoomData] = useState(null);
+  const [disconnectHandler, setDisconnectHandler] = useState(null);
   
   // Step5에서 온 경우 방장으로 간주
   const isHost = location.state?.isHost || false;
@@ -147,6 +148,32 @@ export default function SettlementMenuSelectionPage() {
     return () => unsubscribe();
   }, [roomId, isHost, userNickname]);
 
+  // onDisconnect 설정: completed: false인 참여자가 나가면 자동 제거
+  useEffect(() => {
+    if (!roomId || !userNickname || isHost || !database) return;
+    
+    const participantRef = ref(database, `settlements/${roomId}/participants/${userNickname}`);
+    
+    // roomData를 확인하여 completed: false일 때만 onDisconnect 설정
+    if (roomData?.participants?.[userNickname]?.completed !== true && !disconnectHandler) {
+      const handler = onDisconnect(participantRef);
+      handler.remove().catch((error) => {
+        console.error("onDisconnect 설정 실패:", error);
+      });
+      setDisconnectHandler(handler);
+    }
+
+    return () => {
+      // 컴포넌트 언마운트 시 onDisconnect 취소
+      if (disconnectHandler) {
+        disconnectHandler.cancel().catch((error) => {
+          console.error("onDisconnect 취소 실패:", error);
+        });
+        setDisconnectHandler(null);
+      }
+    };
+  }, [roomId, userNickname, isHost, roomData?.participants?.[userNickname]?.completed]);
+
   const remainingParticipants = totalParticipants - currentParticipants;
 
   const handleMenuToggle = (menuId) => {
@@ -198,7 +225,15 @@ export default function SettlementMenuSelectionPage() {
         return;
       }
 
-      // 참여자 정보 업데이트
+      // 메뉴 확정하기를 누르면 onDisconnect 먼저 취소 (더 이상 제거하지 않음)
+      if (disconnectHandler) {
+        disconnectHandler.cancel().catch((error) => {
+          console.error("onDisconnect 취소 실패:", error);
+        });
+        setDisconnectHandler(null);
+      }
+      
+      // 참여자 정보 업데이트 (completed: true로 설정)
       const participantRef = ref(database, `settlements/${roomId}/participants/${finalUserNickname}`);
       await update(participantRef, {
         selectedMenuIds: selectedMenuIds.length > 0 ? selectedMenuIds : null, // 빈 배열이면 null로 저장

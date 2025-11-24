@@ -53,13 +53,24 @@ export const isValidPassword = (password) => {
 };
 
 /**
- * 닉네임 검증 (1자 이상)
+ * 닉네임 검증 (5글자 이내, 한글 또는 영어만 허용)
  * @param {string} nickname - 닉네임
  * @returns {boolean} 유효한 닉네임인지 여부
  */
 export const isValidNickname = (nickname) => {
   if (!nickname) return false;
-  return nickname.trim().length >= 1;
+  const trimmed = nickname.trim();
+  
+  // 길이 검증 (1자 이상 5자 이내)
+  if (trimmed.length < 1 || trimmed.length > 5) {
+    return false;
+  }
+  
+  // 한글 또는 영어만 허용 (공백, 숫자, 특수문자 불가)
+  // 한글: \uAC00-\uD7A3 (가-힣)
+  // 영어: a-zA-Z
+  const nicknameRegex = /^[가-힣a-zA-Z]+$/;
+  return nicknameRegex.test(trimmed);
 };
 
 /**

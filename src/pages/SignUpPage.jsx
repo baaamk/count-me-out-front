@@ -17,7 +17,7 @@ export default function SignUpPage() {
   const { values, errors, touched, handleChange, handleBlur, validate } = useForm(
     { nickname: "", password: "", confirmPassword: "" },
     {
-      nickname: (value) => (!value.trim() ? null : (!isValidNickname(value) ? "닉네임을 입력해주세요" : null)),
+      nickname: (value) => (!value.trim() ? null : (!isValidNickname(value) ? "5글자 이내의 한글 또는 영어로 입력해주세요" : null)),
       password: (value) => (!value.trim() ? null : (!isValidPassword(value) ? "8자 이상, 영문과 숫자를 포함해주세요" : null)),
       confirmPassword: (value) => {
         if (!value.trim()) return null;
@@ -28,13 +28,13 @@ export default function SignUpPage() {
 
   const handleNicknameDuplicateCheck = async () => {
     if (!values.nickname || !values.nickname.trim()) {
-      alert("닉네임을 입력해주세요");
+      alert("닉네임을 입력해주세요. (5글자 이내, 한글 또는 영어만 가능)");
       setIsNicknameAvailable(false);
       return;
     }
 
     if (!isValidNickname(values.nickname)) {
-      alert("올바른 닉네임을 입력해주세요");
+      alert("5글자 이내의 한글 또는 영어로 입력해주세요");
       setIsNicknameAvailable(false);
       return;
     }
@@ -196,7 +196,7 @@ export default function SignUpPage() {
             }`}>
               <input
                 type="text"
-                placeholder="닉네임"
+                placeholder="닉네임 (5글자 이내, 한글/영어)"
                 value={values.nickname}
                 onChange={(e) => {
                   handleChange("nickname", e.target.value);
@@ -223,6 +223,9 @@ export default function SignUpPage() {
             </div>
             {errors.nickname && (
               <p className="text-xs text-red-500 px-1">{errors.nickname}</p>
+            )}
+            {!errors.nickname && values.nickname && isNicknameAvailable === null && (
+              <p className="text-xs text-gray-500 px-1">5글자 이내의 한글 또는 영어만 사용 가능합니다.</p>
             )}
             {isNicknameAvailable === true && (
               <p className="text-xs text-green-600 px-1">✓ 사용 가능한 닉네임입니다.</p>
