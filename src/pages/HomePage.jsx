@@ -101,8 +101,8 @@ export default function HomePage() {
               id: doc.id,
               uuid: data.roomId,
               type: data.type,
-              amount: data.amount || 0,
-              totalAmount: data.totalAmount || 0,
+              amount: data.amount || 0, // 개인 금액 (본인이 낸 금액)
+              totalAmount: data.totalAmount || 0, // 참고용 (표시하지 않음)
               date: dateStr,
               nickname: data.nickname,
               title: `${dateStr} ${config.title}`,
@@ -235,6 +235,7 @@ export default function HomePage() {
                     </div>
                     <div className="flex flex-1 flex-col gap-0.5 items-end justify-center pl-2.5 pr-0 py-2.5 min-w-0">
                       <p className="font-bold text-base text-[#4a8fe3]">
+                        {/* 개인 금액만 표시 (본인이 낸 금액) */}
                         {typeof item.amount === 'number' ? item.amount.toLocaleString() + '원' : item.amount}
                       </p>
                     </div>

@@ -110,8 +110,8 @@ export default function SettlementListPage() {
             id: doc.id,
             uuid: data.roomId,
             type: data.type,
-            amount: data.amount || 0,
-            totalAmount: data.totalAmount || 0,
+            amount: data.amount || 0, // 개인 금액 (본인이 낸 금액)
+            totalAmount: data.totalAmount || 0, // 참고용 (표시하지 않음)
             date: formatDateShort(completedDate),
             yearMonth: `${year}년 ${month}월`,
             nickname: data.nickname,
@@ -326,6 +326,7 @@ export default function SettlementListPage() {
                 </div>
                 <div className="flex flex-1 flex-col gap-0.5 items-end justify-center min-w-0 shrink-0">
                   <p className="font-bold text-base text-[#3a79ff]">
+                    {/* 개인 금액만 표시 (본인이 낸 금액) */}
                     {formatCurrency(settlement.amount)}
                   </p>
                 </div>
