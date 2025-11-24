@@ -34,20 +34,46 @@ export default function HomePage() {
           const history = [];
           querySnapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // 타입에 따른 제목 생성
+            const typeConfig = {
+              receipt: { icon: "🧾", title: "영수증 정산" },
+              taxi: { icon: "🚕", title: "택시 정산" },
+            };
+            const config = typeConfig[data.type] || { icon: "💰", title: "정산" };
+            const dateStr = data.completedAt 
+              ? new Date(data.completedAt).toLocaleDateString("ko-KR")
+              : data.createdAt 
+              ? new Date(data.createdAt).toLocaleDateString("ko-KR")
+              : "";
+            
             history.push({
               id: doc.id,
               uuid: data.roomId,
               type: data.type,
-              amount: data.amount,
-              totalAmount: data.totalAmount,
-              date: new Date(data.completedAt).toLocaleDateString("ko-KR"),
+              amount: data.amount || 0,
+              totalAmount: data.totalAmount || 0,
+              date: dateStr,
               nickname: data.nickname,
+              title: `${dateStr} ${config.title}`,
+              icon: config.icon,
             });
           });
           
           setSettlementHistory(history);
         } catch (error) {
           console.error("정산 내역 조회 실패:", error);
+          console.error("에러 상세:", {
+            code: error?.code,
+            message: error?.message,
+            stack: error?.stack
+          });
+          
+          // 권한 오류인 경우 사용자에게 알림
+          if (error?.code === 'permission-denied') {
+            console.warn("Firestore 권한 오류: 정산 내역을 읽을 수 없습니다. Firestore 규칙을 확인해주세요.");
+          }
+          
           setSettlementHistory([]);
         }
       } else {
@@ -147,13 +173,15 @@ export default function HomePage() {
                     className="flex gap-3 items-center justify-center h-[54px] p-4 bg-white border border-[#f2f2f2] rounded-xl w-full cursor-pointer"
                   >
                     <p className="text-2xl shrink-0">
-                      {item.type === "taxi" ? "🚕" : "🧾"}
+                      {item.icon || (item.type === "taxi" ? "🚕" : "🧾")}
                     </p>
                     <div className="flex flex-col gap-0.5 items-start pl-0 pr-2.5 py-2.5 shrink-0 w-[149px]">
-                      <p className="font-bold text-[15px] text-[#1a1a1a]">{item.title}</p>
+                      <p className="font-bold text-[15px] text-[#1a1a1a]">{item.title || `${item.date} 정산`}</p>
                     </div>
                     <div className="flex flex-1 flex-col gap-0.5 items-end justify-center pl-2.5 pr-0 py-2.5 min-w-0">
-                      <p className="font-bold text-base text-[#4a8fe3]">{item.amount}</p>
+                      <p className="font-bold text-base text-[#4a8fe3]">
+                        {typeof item.amount === 'number' ? item.amount.toLocaleString() + '원' : item.amount}
+                      </p>
                     </div>
                     <p className="text-xl text-[#b3b3b3] shrink-0">›</p>
                   </div>
