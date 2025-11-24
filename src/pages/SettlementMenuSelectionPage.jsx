@@ -41,28 +41,29 @@ export default function SettlementMenuSelectionPage() {
         // participantCount와 pricePerPerson은 참여자 선택 후 계산되므로 초기에는 없을 수 있음
         // 실시간으로 참여자들의 선택 상태를 계산
         const allParticipants = Object.values(data.participants || {});
+        // completed: true인 참여자만 필터링 (방장 포함, 방장도 선택 확정하면 포함)
         const completedParticipants = allParticipants.filter(p => p.completed === true);
         
         const safeItems = items.map(item => {
-          // 각 메뉴 항목에 대한 참여자 정보 계산 (방장 제외)
-          const participants = allParticipants
-            .filter(p => !p.isHost) // 방장 제외
-            .map((participant) => {
-              const selectedIds = participant.selectedMenuIds;
-              // selectedMenuIds가 null이거나 배열이 아니면 선택하지 않은 것으로 처리
-              const isSelected = selectedIds && Array.isArray(selectedIds) 
-                ? selectedIds.includes(item.id)
-                : false;
-              return {
-                name: participant.nickname,
-                isSelected: isSelected,
-                isCompleted: participant.completed === true,
-              };
-            });
+          // 각 메뉴 항목에 대한 참여자 정보 계산 (모든 참여자 포함, 방장도 포함)
+          const participants = allParticipants.map((participant) => {
+            const selectedIds = participant.selectedMenuIds;
+            // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
+            const isSelected = selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0
+              ? selectedIds.includes(item.id)
+              : false;
+            return {
+              name: participant.nickname,
+              isSelected: isSelected,
+              isCompleted: participant.completed === true,
+              isHost: participant.isHost === true,
+            };
+          });
           
-          // completed: true인 참여자만 카운트 (확정한 참여자만)
+          // completed: true인 참여자만 카운트 (확정한 참여자만, 방장 포함)
           const confirmedCount = completedParticipants.filter((p) => {
             const selectedIds = p.selectedMenuIds;
+            // null이거나 배열이 아니면 선택하지 않은 것으로 처리
             if (!selectedIds || !Array.isArray(selectedIds)) {
               return false;
             }
@@ -308,6 +309,10 @@ export default function SettlementMenuSelectionPage() {
                       {item.participants.map((participant, index) => {
                         // 본인은 표시하지 않음
                         if (participant.name === userNickname) {
+                          return null;
+                        }
+                        // 선택하지 않은 참여자는 표시하지 않음 (빨간색 칩은 표시 안 함)
+                        if (!participant.isSelected) {
                           return null;
                         }
                         return (

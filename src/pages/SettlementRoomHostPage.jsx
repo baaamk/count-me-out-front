@@ -39,9 +39,9 @@ export default function SettlementRoomHostPage() {
         // 메뉴 항목과 참여자 정보 결합
         const menuItemsWithParticipants = menuItemsArray.map((menuItem, index) => {
           const participants = Object.values(data.participants || {}).map((participant) => {
-            // selectedMenuIds가 null이거나 배열이 아닌 경우 처리
+            // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
             const selectedIds = participant.selectedMenuIds;
-            const isSelected = selectedIds && Array.isArray(selectedIds) 
+            const isSelected = selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0
               ? selectedIds.includes(menuItem.id)
               : false;
             return {
@@ -52,11 +52,13 @@ export default function SettlementRoomHostPage() {
 
           const price = menuItem.price || 0;
           // participantCount는 실시간으로 선택한 참여자 수를 계산
-          // completed: true인 참여자만 계산 (메뉴 선택 확정한 참여자만)
+          // completed: true인 참여자만 계산 (메뉴 선택 확정한 참여자만, 방장 포함)
           const allParticipants = Object.values(data.participants || {});
+          // completed: true인 참여자만 필터링 (방장 포함)
           const completedParticipants = allParticipants.filter(p => p.completed === true);
           const selectedCount = completedParticipants.filter((p) => {
             const selectedIds = p.selectedMenuIds;
+            // null이거나 배열이 아니면 선택하지 않은 것으로 처리
             if (!selectedIds || !Array.isArray(selectedIds)) {
               return false;
             }
