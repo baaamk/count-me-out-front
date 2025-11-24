@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import MobileLayout from "../layouts/MobileLayout";
 import StepIndicator from "../components/settlement/StepIndicator";
 import ButtonContainer from "../components/layout/ButtonContainer";
+import KakaoPayHelpModal from "../components/modals/KakaoPayHelpModal";
 import { auth, firestore, database } from "../config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -25,13 +26,19 @@ export default function Step3PaymentInfoPage() {
   const totalParticipants = location.state?.totalParticipants || 2;
 
   // Step2에서 데이터가 전달되지 않은 경우 이전 단계로 리다이렉트
+  // 단, 초기 렌더링 시에는 바로 리다이렉트하지 않고 경고만 표시
   useEffect(() => {
-    if (!location.state || !location.state.menuItems || location.state.menuItems.length === 0) {
-      console.warn("Step2에서 메뉴 데이터가 전달되지 않았습니다. Step2로 리다이렉트합니다.");
-      alert("메뉴 정보가 없습니다. 이전 단계로 돌아갑니다.");
-      navigate("/settlement/receipt/step2");
-    }
-  }, [location.state, navigate]);
+    // location.state가 아직 로드되지 않았을 수 있으므로 약간의 지연 후 확인
+    const timer = setTimeout(() => {
+      if (!location.state || !location.state.menuItems || location.state.menuItems.length === 0) {
+        console.warn("Step2에서 메뉴 데이터가 전달되지 않았습니다.");
+        // 사용자가 직접 입력할 수 있도록 경고만 표시하고 리다이렉트는 하지 않음
+        // alert("메뉴 정보가 없습니다. 이전 단계로 돌아가서 메뉴를 추가해주세요.");
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [location.state]);
 
   // 로그인한 사용자의 결제 정보 자동 채우기
   useEffect(() => {
@@ -187,12 +194,20 @@ export default function Step3PaymentInfoPage() {
       console.log("정산 방 생성 완료:", roomId);
       
       // 다음 단계로 이동 (roomId 전달)
-      navigate("/settlement/receipt/step4", { 
-        state: { 
-          roomId,
-          menuItems,
-        } 
-      });
+      console.log("Step4로 이동 시작:", { roomId, menuItemsCount: menuItems.length });
+      try {
+        navigate("/settlement/receipt/step4", { 
+          state: { 
+            roomId,
+            menuItems,
+          } 
+        });
+        console.log("navigate 호출 완료");
+      } catch (navError) {
+        console.error("navigate 오류:", navError);
+        alert("다음 단계로 이동하는 중 오류가 발생했습니다. 다시 시도해주세요.");
+        setIsSubmitting(false);
+      }
     } catch (error) {
       console.error("정산 방 생성 실패:", error);
       console.error("에러 상세:", {
@@ -320,6 +335,12 @@ export default function Step3PaymentInfoPage() {
           className="w-full max-w-[342px]"
         />
       </div>
+
+      {/* KakaoPay Help Modal */}
+      <KakaoPayHelpModal
+        isOpen={showKakaoPayHelp}
+        onClose={() => setShowKakaoPayHelp(false)}
+      />
     </MobileLayout>
   );
 }
