@@ -46,12 +46,17 @@ export default function SettlementRoomHostPage() {
             };
           });
 
+          const price = menuItem.price || 0;
+          // participantCount는 Firebase에 저장된 값이 있으면 사용, 없으면 현재 선택한 참여자 수로 계산
+          // 하지만 초기에는 아직 계산되지 않았을 수 있으므로 undefined일 수 있음
+          const participantCount = menuItem.participantCount ?? participants.filter(p => p.isSelected).length;
+          
           return {
             id: menuItem.id,
-            name: menuItem.name,
-            price: menuItem.price,
-            participantCount: menuItem.participantCount || participants.filter(p => p.isSelected).length,
-            pricePerPerson: menuItem.pricePerPerson || (menuItem.participantCount > 0 ? Math.floor(menuItem.price / menuItem.participantCount) : menuItem.price),
+            name: menuItem.name || '',
+            price: price,
+            participantCount: participantCount > 0 ? participantCount : undefined, // 0이면 undefined로 처리
+            pricePerPerson: menuItem.pricePerPerson || (participantCount > 0 ? Math.floor(price / participantCount) : undefined),
             isSelected: false, // 방장은 선택하지 않음
             participants: participants,
           };
@@ -181,7 +186,7 @@ export default function SettlementRoomHostPage() {
         
         // 모든 참여자의 Firestore에 정산 내역 저장
         const participants = Object.values(roomData.participants || {});
-        const totalAmount = menuItemsArray.reduce((sum, item) => sum + item.price, 0);
+        const totalAmount = menuItemsArray.reduce((sum, item) => sum + (item.price || 0), 0);
 
         for (const participant of participants) {
           if (participant.uid) {
@@ -223,7 +228,7 @@ export default function SettlementRoomHostPage() {
   const selectedItems = menuItemsState.filter((item) => item.isSelected);
 
   // 총 합계 계산
-  const totalAmount = selectedItems.reduce((sum, item) => sum + item.pricePerPerson, 0);
+  const totalAmount = selectedItems.reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
   
   // 방장이 메뉴 선택을 완료했는지 확인 (선택한 메뉴가 있는지)
   const hasHostSelectedMenu = selectedItems.length > 0;
@@ -282,8 +287,10 @@ export default function SettlementRoomHostPage() {
                   <div className="flex flex-col gap-1 h-[38px] items-start shrink-0 flex-1 min-w-0">
                     <p className="font-semibold text-base text-[#1a1a1a] truncate">{item.name}</p>
                     <p className="font-normal text-xs text-gray-500 truncate">
-                      {item.price.toLocaleString()}원 • {item.participantCount}명 참여 •{" "}
-                      {item.pricePerPerson.toLocaleString()}원/인
+                      {(item.price || 0).toLocaleString()}원
+                      {item.participantCount > 0 && (
+                        <> • {item.participantCount}명 참여 • {(item.pricePerPerson || 0).toLocaleString()}원/인</>
+                      )}
                     </p>
                   </div>
                   {/* Checkbox */}
@@ -369,7 +376,7 @@ export default function SettlementRoomHostPage() {
                   >
                     <p className="font-medium text-[#4d4d4d]">{item.name}</p>
                     <p className="font-semibold text-[#1a1a1a]">
-                      {item.pricePerPerson.toLocaleString()}원
+                      {(item.pricePerPerson || 0).toLocaleString()}원
                     </p>
                   </div>
                 ))}
@@ -381,7 +388,7 @@ export default function SettlementRoomHostPage() {
               {/* Total Section */}
               <div className="flex font-bold h-8 items-center justify-between px-0 py-2 text-[#1a1a1a] w-full">
                 <p className="text-base">총 합계</p>
-                <p className="text-lg">{totalAmount.toLocaleString()}원</p>
+                <p className="text-lg">{(totalAmount || 0).toLocaleString()}원</p>
               </div>
             </div>
           )}

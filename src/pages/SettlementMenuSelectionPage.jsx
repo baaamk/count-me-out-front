@@ -16,7 +16,7 @@ export default function SettlementMenuSelectionPage() {
   // Step5에서 온 경우 방장으로 간주
   const isHost = location.state?.isHost || false;
   const roomId = location.state?.roomId;
-  const userNickname = location.state?.userNickname || "참여자"; // TODO: 실제 사용자 닉네임 가져오기
+  const [userNickname, setUserNickname] = useState(location.state?.userNickname || null);
 
   // Firebase에서 정산 방 데이터 가져오기
   useEffect(() => {
@@ -37,15 +37,54 @@ export default function SettlementMenuSelectionPage() {
           : data.menuItems
           ? Object.values(data.menuItems)
           : [];
-        setMenuItems(items);
+        // 각 항목에 필수 속성 기본값 설정
+        // participantCount와 pricePerPerson은 참여자 선택 후 계산되므로 초기에는 없을 수 있음
+        const safeItems = items.map(item => ({
+          id: item.id || 0,
+          name: item.name || '',
+          price: item.price || 0,
+          quantity: item.quantity || 1,
+          participantCount: item.participantCount, // undefined일 수 있음 (참여자 선택 후 계산)
+          pricePerPerson: item.pricePerPerson, // undefined일 수 있음 (참여자 선택 후 계산)
+          participants: item.participants || [],
+        }));
+        setMenuItems(safeItems);
         setTotalParticipants(data.totalParticipants || 0);
         setCurrentParticipants(data.currentParticipants || 0);
+        
+        // 방장인 경우: Firebase에서 방장 정보를 가져와서 selectedMenuIds 초기화
+        if (isHost && !userNickname) {
+          const participants = data.participants || {};
+          const hostParticipant = Object.values(participants).find(p => p.isHost === true);
+          if (hostParticipant) {
+            setUserNickname(hostParticipant.nickname);
+            // 방장의 selectedMenuIds를 불러와서 초기화 (null이면 빈 배열)
+            const hostSelectedIds = hostParticipant.selectedMenuIds;
+            if (hostSelectedIds && Array.isArray(hostSelectedIds) && hostSelectedIds.length > 0) {
+              setSelectedMenuIds(hostSelectedIds);
+            } else {
+              // null이거나 빈 배열이면 빈 배열로 초기화
+              setSelectedMenuIds([]);
+            }
+          }
+        } else if (!isHost && userNickname) {
+          // 참여자인 경우: Firebase에서 자신의 selectedMenuIds 불러오기
+          const participant = data.participants?.[userNickname];
+          if (participant) {
+            const participantSelectedIds = participant.selectedMenuIds;
+            if (participantSelectedIds && Array.isArray(participantSelectedIds) && participantSelectedIds.length > 0) {
+              setSelectedMenuIds(participantSelectedIds);
+            } else {
+              setSelectedMenuIds([]);
+            }
+          }
+        }
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [roomId]);
+  }, [roomId, isHost, userNickname]);
 
   const remainingParticipants = totalParticipants - currentParticipants;
 
@@ -63,6 +102,31 @@ export default function SettlementMenuSelectionPage() {
       return;
     }
 
+    // 방장인 경우 userNickname이 아직 설정되지 않았을 수 있으므로 확인
+    let finalUserNickname = userNickname;
+    if (isHost && !finalUserNickname) {
+      try {
+        const roomRef = ref(database, `settlements/${roomId}`);
+        const snapshot = await get(roomRef);
+        const roomData = snapshot.val();
+        if (roomData) {
+          const participants = roomData.participants || {};
+          const hostParticipant = Object.values(participants).find(p => p.isHost === true);
+          if (hostParticipant) {
+            finalUserNickname = hostParticipant.nickname;
+            setUserNickname(finalUserNickname);
+          }
+        }
+      } catch (err) {
+        console.error("방장 정보 가져오기 실패:", err);
+      }
+    }
+
+    if (!finalUserNickname) {
+      alert("사용자 정보를 찾을 수 없습니다.");
+      return;
+    }
+
     try {
       const roomRef = ref(database, `settlements/${roomId}`);
       const snapshot = await get(roomRef);
@@ -74,9 +138,9 @@ export default function SettlementMenuSelectionPage() {
       }
 
       // 참여자 정보 업데이트
-      const participantRef = ref(database, `settlements/${roomId}/participants/${userNickname}`);
+      const participantRef = ref(database, `settlements/${roomId}/participants/${finalUserNickname}`);
       await update(participantRef, {
-        selectedMenuIds: selectedMenuIds,
+        selectedMenuIds: selectedMenuIds.length > 0 ? selectedMenuIds : null, // 빈 배열이면 null로 저장
         completed: true,
         completedAt: Date.now(),
       });
@@ -84,7 +148,7 @@ export default function SettlementMenuSelectionPage() {
       // 현재 완료된 참여자 수 업데이트
       const completedCount = Object.values(roomData.participants || {}).filter(
         (p) => p.completed
-      ).length + (roomData.participants?.[userNickname]?.completed ? 0 : 1);
+      ).length + (roomData.participants?.[finalUserNickname]?.completed ? 0 : 1);
       
       await update(ref(database, `settlements/${roomId}`), {
         currentParticipants: completedCount,
@@ -117,11 +181,11 @@ export default function SettlementMenuSelectionPage() {
 
       if (isHost) {
         // 방장은 방장 페이지로 이동
-        navigate("/settlement/room/host", { state: { roomId } });
+        navigate(`/settlement/room/${roomId}/host`, { state: { roomId } });
       } else {
         // 참여자는 메뉴 선택 확정 페이지로 이동
-        navigate("/settlement/room/menu-selection-confirmed", { 
-          state: { roomId, userNickname } 
+        navigate(`/settlement/room/${roomId}/menu-selection-confirmed`, { 
+          state: { roomId, userNickname: finalUserNickname } 
         });
       }
     } catch (error) {
@@ -166,8 +230,10 @@ export default function SettlementMenuSelectionPage() {
                         {item.name}
                       </p>
                       <p className="font-normal text-xs text-gray-500 truncate">
-                        {item.price.toLocaleString()}원 • {item.participantCount}명 참여 •{" "}
-                        {item.pricePerPerson.toLocaleString()}원/인
+                        {(item.price || 0).toLocaleString()}원
+                        {item.participantCount > 0 && (
+                          <> • {item.participantCount}명 참여 • {(item.pricePerPerson || 0).toLocaleString()}원/인</>
+                        )}
                       </p>
                     </div>
                     {/* Checkbox */}

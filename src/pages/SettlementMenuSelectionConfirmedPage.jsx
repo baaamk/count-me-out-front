@@ -50,12 +50,16 @@ export default function SettlementMenuSelectionConfirmedPage() {
           const userParticipant = data.participants?.[userNickname];
           const isSelected = userParticipant?.selectedMenuIds?.includes(menuItem.id) || false;
 
+          const price = menuItem.price || 0;
+          // participantCount는 Firebase에 저장된 값이 있으면 사용, 없으면 현재 선택한 참여자 수로 계산
+          const participantCount = menuItem.participantCount ?? participants.filter(p => p.isSelected).length;
+          
           return {
             id: menuItem.id,
-            name: menuItem.name,
-            price: menuItem.price,
-            participantCount: menuItem.participantCount || participants.filter(p => p.isSelected).length,
-            pricePerPerson: menuItem.pricePerPerson || (menuItem.participantCount > 0 ? Math.floor(menuItem.price / menuItem.participantCount) : menuItem.price),
+            name: menuItem.name || '',
+            price: price,
+            participantCount: participantCount > 0 ? participantCount : undefined, // 0이면 undefined로 처리
+            pricePerPerson: menuItem.pricePerPerson || (participantCount > 0 ? Math.floor(price / participantCount) : undefined),
             isSelected: isSelected,
             participants: participants,
           };
@@ -130,7 +134,7 @@ export default function SettlementMenuSelectionConfirmedPage() {
   const selectedItems = menuItems.filter((item) => item.isSelected);
   
   // 총 합계 계산
-  const totalAmount = selectedItems.reduce((sum, item) => sum + item.pricePerPerson, 0);
+  const totalAmount = selectedItems.reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
 
   return (
     <MobileLayout>
@@ -176,7 +180,10 @@ export default function SettlementMenuSelectionConfirmedPage() {
                   <div className="flex flex-col gap-1 h-[38px] items-start shrink-0 w-[200px]">
                     <p className="font-semibold text-base text-[#1a1a1a]">{item.name}</p>
                     <p className="font-normal text-xs text-gray-500">
-                      {item.price.toLocaleString()}원 • {item.participantCount}명 참여 • {item.pricePerPerson.toLocaleString()}원/인
+                      {(item.price || 0).toLocaleString()}원
+                      {item.participantCount > 0 && (
+                        <> • {item.participantCount}명 참여 • {(item.pricePerPerson || 0).toLocaleString()}원/인</>
+                      )}
                     </p>
                   </div>
                   {/* Checkbox */}
@@ -250,7 +257,7 @@ export default function SettlementMenuSelectionConfirmedPage() {
                   >
                     <p className="font-medium text-[#4d4d4d]">{item.name}</p>
                     <p className="font-semibold text-[#1a1a1a]">
-                      {item.pricePerPerson.toLocaleString()}원
+                      {(item.pricePerPerson || 0).toLocaleString()}원
                     </p>
                   </div>
                 ))}
@@ -262,7 +269,7 @@ export default function SettlementMenuSelectionConfirmedPage() {
               {/* Total Section */}
               <div className="flex font-bold h-8 items-center justify-between px-0 py-2 text-[#1a1a1a] w-full">
                 <p className="text-base">총 합계</p>
-                <p className="text-lg">{totalAmount.toLocaleString()}원</p>
+                <p className="text-lg">{(totalAmount || 0).toLocaleString()}원</p>
               </div>
             </div>
           )}
