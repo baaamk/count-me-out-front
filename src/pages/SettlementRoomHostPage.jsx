@@ -39,7 +39,11 @@ export default function SettlementRoomHostPage() {
         // 메뉴 항목과 참여자 정보 결합
         const menuItemsWithParticipants = menuItemsArray.map((menuItem, index) => {
           const participants = Object.values(data.participants || {}).map((participant) => {
-            const isSelected = participant.selectedMenuIds?.includes(menuItem.id) || false;
+            // selectedMenuIds가 null이거나 배열이 아닌 경우 처리
+            const selectedIds = participant.selectedMenuIds;
+            const isSelected = selectedIds && Array.isArray(selectedIds) 
+              ? selectedIds.includes(menuItem.id)
+              : false;
             return {
               name: participant.nickname,
               isSelected: isSelected,
@@ -47,9 +51,20 @@ export default function SettlementRoomHostPage() {
           });
 
           const price = menuItem.price || 0;
-          // participantCount는 Firebase에 저장된 값이 있으면 사용, 없으면 현재 선택한 참여자 수로 계산
-          // 하지만 초기에는 아직 계산되지 않았을 수 있으므로 undefined일 수 있음
-          const participantCount = menuItem.participantCount ?? participants.filter(p => p.isSelected).length;
+          // participantCount는 실시간으로 선택한 참여자 수를 계산
+          // completed: true인 참여자만 계산 (메뉴 선택 확정한 참여자만)
+          const allParticipants = Object.values(data.participants || {});
+          const completedParticipants = allParticipants.filter(p => p.completed === true);
+          const selectedCount = completedParticipants.filter((p) => {
+            const selectedIds = p.selectedMenuIds;
+            if (!selectedIds || !Array.isArray(selectedIds)) {
+              return false;
+            }
+            return selectedIds.includes(menuItem.id);
+          }).length;
+          
+          // Firebase에 저장된 값이 있으면 우선 사용, 없으면 실시간 계산값 사용
+          const participantCount = menuItem.participantCount ?? selectedCount;
           
           return {
             id: menuItem.id,

@@ -39,15 +39,43 @@ export default function SettlementMenuSelectionPage() {
           : [];
         // 각 항목에 필수 속성 기본값 설정
         // participantCount와 pricePerPerson은 참여자 선택 후 계산되므로 초기에는 없을 수 있음
-        const safeItems = items.map(item => ({
-          id: item.id || 0,
-          name: item.name || '',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
-          participantCount: item.participantCount, // undefined일 수 있음 (참여자 선택 후 계산)
-          pricePerPerson: item.pricePerPerson, // undefined일 수 있음 (참여자 선택 후 계산)
-          participants: item.participants || [],
-        }));
+        // 실시간으로 참여자들의 선택 상태를 계산
+        const allParticipants = Object.values(data.participants || {});
+        const completedParticipants = allParticipants.filter(p => p.completed === true);
+        
+        const safeItems = items.map(item => {
+          // 각 메뉴 항목에 대한 참여자 정보 계산
+          const participants = allParticipants.map((participant) => {
+            const selectedIds = participant.selectedMenuIds;
+            const isSelected = selectedIds && Array.isArray(selectedIds) 
+              ? selectedIds.includes(item.id)
+              : false;
+            return {
+              name: participant.nickname,
+              isSelected: isSelected,
+              isCompleted: participant.completed === true,
+            };
+          });
+          
+          // completed: true인 참여자만 카운트 (확정한 참여자만)
+          const confirmedCount = completedParticipants.filter((p) => {
+            const selectedIds = p.selectedMenuIds;
+            if (!selectedIds || !Array.isArray(selectedIds)) {
+              return false;
+            }
+            return selectedIds.includes(item.id);
+          }).length;
+          
+          return {
+            id: item.id || 0,
+            name: item.name || '',
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            participantCount: confirmedCount > 0 ? confirmedCount : undefined, // 확정한 참여자만 카운트
+            pricePerPerson: item.pricePerPerson, // undefined일 수 있음 (참여자 선택 후 계산)
+            participants: participants, // 실시간 참여자 정보
+          };
+        });
         setMenuItems(safeItems);
         setTotalParticipants(data.totalParticipants || 0);
         setCurrentParticipants(data.currentParticipants || 0);
@@ -263,29 +291,42 @@ export default function SettlementMenuSelectionPage() {
                     </button>
                   </div>
 
-                  {/* Participant Chips */}
-                  <div className="flex gap-1.5 h-6 items-center shrink-0 w-full flex-wrap">
-                    {item.participants.map((participant, index) => (
-                      <div
-                        key={index}
-                        className={`flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 ${
-                          participant.isSelected
-                            ? "bg-[#e5f2ff]"
-                            : "bg-[#ffe5e5]"
-                        }`}
-                      >
-                        <p
-                          className={`font-medium text-[11px] whitespace-nowrap ${
-                            participant.isSelected
-                              ? "text-[#3366cc]"
-                              : "text-[#cc3333]"
-                          }`}
-                        >
-                          {participant.name}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Participant Chips - 실시간으로 누가 선택하고 있는지 표시 */}
+                  {item.participants && item.participants.length > 0 && (
+                    <div className="flex gap-1.5 h-6 items-center shrink-0 w-full flex-wrap">
+                      {item.participants.map((participant, index) => {
+                        // 본인은 표시하지 않음
+                        if (participant.name === userNickname) {
+                          return null;
+                        }
+                        return (
+                          <div
+                            key={index}
+                            className={`flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 ${
+                              participant.isSelected
+                                ? participant.isCompleted
+                                  ? "bg-[#e5f2ff]" // 확정한 참여자
+                                  : "bg-[#fff4e5]" // 선택 중인 참여자 (아직 확정 안 함)
+                                : "bg-[#ffe5e5]"
+                            }`}
+                          >
+                            <p
+                              className={`font-medium text-[11px] whitespace-nowrap ${
+                                participant.isSelected
+                                  ? participant.isCompleted
+                                    ? "text-[#3366cc]" // 확정한 참여자
+                                    : "text-[#ff9900]" // 선택 중인 참여자
+                                  : "text-[#cc3333]"
+                              }`}
+                            >
+                              {participant.name}
+                              {participant.isSelected && !participant.isCompleted && " (선택 중)"}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );
