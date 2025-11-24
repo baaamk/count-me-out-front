@@ -17,11 +17,21 @@ export default function Step3PaymentInfoPage() {
   const [accountNumber, setAccountNumber] = useState("");
   const [showBankDropdown, setShowBankDropdown] = useState(false);
   const [showKakaoPayHelp, setShowKakaoPayHelp] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef(null);
   
   // Step2에서 전달받은 메뉴 데이터 및 참여자 수
   const menuItems = location.state?.menuItems || [];
   const totalParticipants = location.state?.totalParticipants || 2;
+
+  // Step2에서 데이터가 전달되지 않은 경우 이전 단계로 리다이렉트
+  useEffect(() => {
+    if (!location.state || !location.state.menuItems || location.state.menuItems.length === 0) {
+      console.warn("Step2에서 메뉴 데이터가 전달되지 않았습니다. Step2로 리다이렉트합니다.");
+      alert("메뉴 정보가 없습니다. 이전 단계로 돌아갑니다.");
+      navigate("/settlement/receipt/step2");
+    }
+  }, [location.state, navigate]);
 
   // 로그인한 사용자의 결제 정보 자동 채우기
   useEffect(() => {
@@ -103,6 +113,11 @@ export default function Step3PaymentInfoPage() {
   };
 
   const handleNext = async () => {
+    // 이미 제출 중이면 중복 실행 방지
+    if (isSubmitting) {
+      return;
+    }
+
     // 필수 항목 검증 (닉네임, 은행, 계좌번호)
     if (!nickname || !nickname.trim()) {
       alert("닉네임을 입력해주세요.");
@@ -112,6 +127,14 @@ export default function Step3PaymentInfoPage() {
       alert("은행과 계좌번호는 필수 항목입니다.");
       return;
     }
+    
+    // 메뉴 항목 확인
+    if (!menuItems || menuItems.length === 0) {
+      alert("메뉴 항목이 없습니다. 이전 단계로 돌아가서 메뉴를 추가해주세요.");
+      return;
+    }
+    
+    setIsSubmitting(true);
     
     // 정산 방 생성 (UUID 생성 및 Firebase에 저장)
     try {
@@ -125,9 +148,11 @@ export default function Step3PaymentInfoPage() {
       };
       const roomId = generateUUID();
       
+      console.log("정산 방 생성 시작:", { roomId, menuItemsCount: menuItems.length, totalParticipants });
+      
       // Firebase Realtime Database에 정산 방 데이터 저장
       const roomRef = ref(database, `settlements/${roomId}`);
-      await set(roomRef, {
+      const roomData = {
         id: roomId,
         type: "receipt",
         createdAt: Date.now(),
@@ -156,7 +181,10 @@ export default function Step3PaymentInfoPage() {
         totalParticipants: totalParticipants,
         currentParticipants: 1,
         status: "active", // active, completed
-      });
+      };
+      
+      await set(roomRef, roomData);
+      console.log("정산 방 생성 완료:", roomId);
       
       // 다음 단계로 이동 (roomId 전달)
       navigate("/settlement/receipt/step4", { 
@@ -167,7 +195,13 @@ export default function Step3PaymentInfoPage() {
       });
     } catch (error) {
       console.error("정산 방 생성 실패:", error);
-      alert("정산 방 생성에 실패했습니다. 다시 시도해주세요.");
+      console.error("에러 상세:", {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      alert(`정산 방 생성에 실패했습니다.\n\n에러: ${error.message || "알 수 없는 오류"}\n\n다시 시도해주세요.`);
+      setIsSubmitting(false);
     }
   };
 
@@ -281,6 +315,8 @@ export default function Step3PaymentInfoPage() {
         <ButtonContainer
           onPrevious={handlePrevious}
           onNext={handleNext}
+          nextDisabled={isSubmitting}
+          nextText={isSubmitting ? "처리 중..." : "다음 단계"}
           className="w-full max-w-[342px]"
         />
       </div>
