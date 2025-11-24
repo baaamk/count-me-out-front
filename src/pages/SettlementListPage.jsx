@@ -52,12 +52,34 @@ export default function SettlementListPage() {
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           
+          // Firestore Timestamp를 Date로 변환하는 헬퍼 함수
+          const toDate = (timestamp) => {
+            if (!timestamp) return null;
+            // Firestore Timestamp 객체인 경우
+            if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+              return timestamp.toDate();
+            }
+            // toMillis 메서드가 있는 경우
+            if (timestamp.toMillis && typeof timestamp.toMillis === 'function') {
+              return new Date(timestamp.toMillis());
+            }
+            // seconds와 nanoseconds 속성이 있는 경우 (Firestore Timestamp 구조)
+            if (timestamp.seconds !== undefined) {
+              return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+            }
+            // 숫자인 경우 (밀리초)
+            if (typeof timestamp === 'number') {
+              return new Date(timestamp);
+            }
+            // Date 객체인 경우
+            if (timestamp instanceof Date) {
+              return timestamp;
+            }
+            return null;
+          };
+          
           // completedAt이 없으면 createdAt 사용
-          const completedDate = data.completedAt 
-            ? new Date(data.completedAt) 
-            : data.createdAt 
-            ? new Date(data.createdAt)
-            : new Date(); // 둘 다 없으면 현재 날짜 사용
+          const completedDate = toDate(data.completedAt) || toDate(data.createdAt) || new Date();
             
           if (isNaN(completedDate.getTime())) {
             return; // 유효하지 않은 날짜는 스킵
@@ -73,6 +95,17 @@ export default function SettlementListPage() {
           };
           const config = typeConfig[data.type] || { icon: "💰", title: "정산" };
           
+          // 정렬용 타임스탬프 (밀리초)
+          const completedAtMs = data.completedAt 
+            ? (data.completedAt.toMillis ? data.completedAt.toMillis() : 
+               (data.completedAt.seconds ? data.completedAt.seconds * 1000 : 
+                (typeof data.completedAt === 'number' ? data.completedAt : completedDate.getTime())))
+            : (data.createdAt 
+              ? (data.createdAt.toMillis ? data.createdAt.toMillis() : 
+                 (data.createdAt.seconds ? data.createdAt.seconds * 1000 : 
+                  (typeof data.createdAt === 'number' ? data.createdAt : completedDate.getTime())))
+              : completedDate.getTime());
+          
           settlementList.push({
             id: doc.id,
             uuid: data.roomId,
@@ -84,7 +117,7 @@ export default function SettlementListPage() {
             nickname: data.nickname,
             icon: config.icon,
             title: config.title,
-            completedAt: data.completedAt || data.createdAt || Date.now(), // 정렬용
+            completedAt: completedAtMs, // 정렬용 (밀리초)
           });
         });
         

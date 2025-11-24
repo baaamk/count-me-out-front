@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import MobileLayout from "../layouts/MobileLayout";
 import { ref, onValue, update, get } from "firebase/database";
 import { database, auth, firestore } from "../config/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, Timestamp } from "firebase/firestore";
 
 export default function SettlementRoomHostPage() {
   const navigate = useNavigate();
@@ -236,13 +236,16 @@ export default function SettlementRoomHostPage() {
     }
 
     try {
+      const completedAtTimestamp = Date.now();
+      
       // 정산 상태를 completed로 변경
       await update(ref(database, `settlements/${roomId}`), {
         status: "completed",
-        completedAt: Date.now(),
+        completedAt: completedAtTimestamp,
       });
 
-      // 정산 방 데이터 가져오기
+      // 정산 방 데이터 가져오기 (약간의 지연 후 가져오기)
+      await new Promise(resolve => setTimeout(resolve, 100));
       const roomRef = ref(database, `settlements/${roomId}`);
       const snapshot = await get(roomRef);
       const roomData = snapshot.val();
@@ -286,41 +289,61 @@ export default function SettlementRoomHostPage() {
           };
         });
 
+        // Firestore에 저장할 정산 내역 배열
+        const settlementPromises = [];
+        
         for (const participant of participants) {
           if (participant.uid) {
             // 로그인한 사용자만 Firestore에 저장
-            try {
-              const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
-              // 참여자가 선택한 메뉴들의 pricePerPerson 합산 (실시간 계산값 사용)
-              const selectedMenuIds = participant.selectedMenuIds || [];
-              const participantAmount = menuItemsWithPricePerPerson
-                .filter((item) => {
-                  const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
-                  return selectedMenuIds.some(id => {
-                    const selectedId = typeof id === 'number' ? id : Number(id);
-                    return selectedId === itemId;
-                  });
-                })
-                .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+            const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
+            // 참여자가 선택한 메뉴들의 pricePerPerson 합산 (실시간 계산값 사용)
+            const selectedMenuIds = participant.selectedMenuIds || [];
+            const participantAmount = menuItemsWithPricePerPerson
+              .filter((item) => {
+                const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+                return selectedMenuIds.some(id => {
+                  const selectedId = typeof id === 'number' ? id : Number(id);
+                  return selectedId === itemId;
+                });
+              })
+              .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
 
-              await setDoc(userSettlementRef, {
-                roomId: roomId,
-                type: roomData.type || "receipt",
-                role: participant.isHost ? "host" : "participant",
-                nickname: participant.nickname,
-                joinedAt: participant.joinedAt,
-                amount: participantAmount,
-                totalAmount: totalAmount,
-                status: "completed",
-                createdAt: roomData.createdAt,
-                completedAt: roomData.completedAt || Date.now(),
-              });
-            } catch (firestoreError) {
-              console.error(`사용자 ${participant.uid} 정산 내역 저장 실패:`, firestoreError);
-              // Firestore 저장 실패해도 정산 확정은 계속 진행
-            }
+            const settlementData = {
+              roomId: roomId,
+              type: roomData.type || "receipt",
+              role: participant.isHost ? "host" : "participant",
+              nickname: participant.nickname,
+              joinedAt: participant.joinedAt,
+              amount: participantAmount,
+              totalAmount: totalAmount,
+              status: "completed",
+              createdAt: roomData.createdAt ? Timestamp.fromMillis(roomData.createdAt) : Timestamp.now(),
+              completedAt: Timestamp.fromMillis(completedAtTimestamp), // Firestore Timestamp로 변환
+            };
+            
+            settlementPromises.push(
+              setDoc(userSettlementRef, settlementData)
+                .then(() => {
+                  console.log(`✅ 사용자 ${participant.uid} 정산 내역 저장 성공:`, settlementData);
+                })
+                .catch((firestoreError) => {
+                  console.error(`❌ 사용자 ${participant.uid} 정산 내역 저장 실패:`, firestoreError);
+                  console.error("저장 실패 상세:", {
+                    code: firestoreError?.code,
+                    message: firestoreError?.message,
+                    data: settlementData,
+                  });
+                  // Firestore 저장 실패해도 정산 확정은 계속 진행
+                })
+            );
+          } else {
+            console.warn(`⚠️ 참여자 ${participant.nickname}의 uid가 없어 Firestore에 저장하지 않습니다.`);
           }
         }
+        
+        // 모든 Firestore 저장 완료 대기
+        await Promise.allSettled(settlementPromises);
+        console.log(`✅ 총 ${settlementPromises.length}명의 정산 내역 저장 완료`);
       }
       
       navigate("/settlement/complete", { state: { roomId } });

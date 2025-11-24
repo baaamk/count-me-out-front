@@ -55,13 +55,14 @@ export default function SettlementCompletePage() {
             }).length;
             
             // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+            // ⚠️ 항상 실시간으로 계산 (Firebase에 저장된 값은 신뢰하지 않음)
             const calculatedPricePerPerson = confirmedCount > 0
               ? Math.floor((item.price || 0) / confirmedCount)
-              : undefined;
+              : 0; // 참여자가 없으면 0
             
             return {
               ...item,
-              pricePerPerson: item.pricePerPerson ?? calculatedPricePerPerson,
+              pricePerPerson: calculatedPricePerPerson, // 항상 실시간 계산값 사용
               confirmedCount: confirmedCount, // 참여자 수 저장
             };
           });

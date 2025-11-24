@@ -90,12 +90,35 @@ export default function MyPage() {
           
           querySnapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // Firestore Timestamp를 Date로 변환하는 헬퍼 함수
+            const toDate = (timestamp) => {
+              if (!timestamp) return null;
+              // Firestore Timestamp 객체인 경우
+              if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+                return timestamp.toDate();
+              }
+              // toMillis 메서드가 있는 경우
+              if (timestamp.toMillis && typeof timestamp.toMillis === 'function') {
+                return new Date(timestamp.toMillis());
+              }
+              // seconds와 nanoseconds 속성이 있는 경우 (Firestore Timestamp 구조)
+              if (timestamp.seconds !== undefined) {
+                return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+              }
+              // 숫자인 경우 (밀리초)
+              if (typeof timestamp === 'number') {
+                return new Date(timestamp);
+              }
+              // Date 객체인 경우
+              if (timestamp instanceof Date) {
+                return timestamp;
+              }
+              return null;
+            };
+            
             // completedAt이 없으면 createdAt 사용, 둘 다 없으면 스킵
-            const completedDate = data.completedAt 
-              ? new Date(data.completedAt) 
-              : data.createdAt 
-              ? new Date(data.createdAt)
-              : null;
+            const completedDate = toDate(data.completedAt) || toDate(data.createdAt) || null;
             
             if (!completedDate || isNaN(completedDate.getTime())) {
               return; // 유효하지 않은 날짜는 스킵
@@ -129,7 +152,7 @@ export default function MyPage() {
         }
       } catch (error) {
         console.error("사용자 데이터 조회 실패:", error);
-        
+          
         // 권한 오류가 발생해도 기본값으로 설정하여 페이지가 표시되도록 함
         const email = user.email || "";
         const displayEmail = email.includes("@countmeout.internal") ? "" : email;
