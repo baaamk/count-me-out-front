@@ -66,7 +66,10 @@ export default function SettlementMenuSelectionPage() {
             };
           });
           
-          // completed: true인 참여자만 카운트 (확정한 참여자만, 방장 포함)
+          // 선택한 참여자 수 (칩에 표시되는 참여자 수와 일치)
+          const selectedCount = participants.filter(p => p.isSelected).length;
+          
+          // completed: true인 참여자만 카운트 (pricePerPerson 계산용)
           const confirmedCount = completedParticipants.filter((p) => {
             const selectedIds = p.selectedMenuIds;
             // null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
@@ -82,20 +85,18 @@ export default function SettlementMenuSelectionPage() {
           }).length;
           
           // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+          // ⚠️ 항상 실시간으로 계산 (Firebase에 저장된 값은 신뢰하지 않음)
           const calculatedPricePerPerson = confirmedCount > 0 
             ? Math.floor((item.price || 0) / confirmedCount)
-            : undefined;
-          
-          // Firebase에 저장된 값이 있으면 우선 사용, 없으면 실시간 계산값 사용
-          const pricePerPerson = item.pricePerPerson ?? calculatedPricePerPerson;
+            : 0; // 참여자가 없으면 0
           
           return {
             id: item.id || 0,
             name: item.name || '',
             price: item.price || 0,
             quantity: item.quantity || 1,
-            participantCount: confirmedCount > 0 ? confirmedCount : undefined, // 확정한 참여자만 카운트
-            pricePerPerson: pricePerPerson, // 실시간 계산 또는 Firebase 저장값
+            participantCount: selectedCount > 0 ? selectedCount : undefined, // 선택한 참여자 수 (칩과 일치)
+            pricePerPerson: calculatedPricePerPerson, // 항상 실시간 계산값 사용 (확정한 참여자 수 기반)
             participants: participants, // 실시간 참여자 정보
           };
         });
@@ -294,6 +295,11 @@ export default function SettlementMenuSelectionPage() {
             // 실시간으로 참여자 수와 가격 계산 (roomData 기반)
             const allParticipants = Object.values(roomData?.participants || {});
             const completedParticipants = allParticipants.filter(p => p.completed === true);
+            
+            // 선택한 참여자 수 (칩에 표시되는 참여자 수와 일치)
+            const selectedCount = item.participants?.filter(p => p.isSelected).length || 0;
+            
+            // completed: true인 참여자만 카운트 (pricePerPerson 계산용)
             const confirmedCount = completedParticipants.filter((p) => {
               const selectedIds = p.selectedMenuIds;
               if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
@@ -305,6 +311,7 @@ export default function SettlementMenuSelectionPage() {
                 return selectedId === menuId;
               });
             }).length;
+            
             const realTimePricePerPerson = confirmedCount > 0 
               ? Math.floor((item.price || 0) / confirmedCount)
               : undefined;
@@ -324,8 +331,8 @@ export default function SettlementMenuSelectionPage() {
                       </p>
                       <p className="font-normal text-xs text-gray-500 truncate">
                         {(item.price || 0).toLocaleString()}원
-                        {confirmedCount > 0 && realTimePricePerPerson !== undefined && (
-                          <> • {confirmedCount}명 참여 • {realTimePricePerPerson.toLocaleString()}원/인</>
+                        {selectedCount > 0 && realTimePricePerPerson !== undefined && (
+                          <> • {selectedCount}명 참여 • {realTimePricePerPerson.toLocaleString()}원/인</>
                         )}
                       </p>
                     </div>
@@ -415,12 +422,13 @@ export default function SettlementMenuSelectionPage() {
 
               {/* Selected Items */}
               <div className="flex flex-col gap-2 h-[60px] items-start px-0 py-2 shrink-0 w-full overflow-y-auto">
-                {menuItems
+                  {menuItems
                   .filter(item => selectedMenuIds.includes(item.id))
                   .map((item) => {
                     // 실시간으로 pricePerPerson 계산
                     const allParticipants = Object.values(roomData?.participants || {});
                     const completedParticipants = allParticipants.filter(p => p.completed === true);
+                    // completed: true인 참여자만 카운트 (pricePerPerson 계산용)
                     const confirmedCount = completedParticipants.filter((p) => {
                       const selectedIds = p.selectedMenuIds;
                       if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {

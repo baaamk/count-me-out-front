@@ -44,6 +44,9 @@ export default function SettlementPaymentPage() {
           return;
         }
 
+        // 정산 완료 여부 확인
+        const isSettlementCompleted = roomData.status === "completed";
+        
         // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
         const menuItemsArray = Array.isArray(roomData.menuItems)
           ? roomData.menuItems
@@ -51,23 +54,62 @@ export default function SettlementPaymentPage() {
           ? Object.values(roomData.menuItems)
           : [];
         
-        // 선택한 메뉴 항목 계산
-        const selectedMenuItems = menuItemsArray.filter((item) =>
-          participant.selectedMenuIds?.includes(item.id)
-        );
+        // 모든 참여자 정보 가져오기
+        const allParticipants = Object.values(roomData.participants || {});
+        // completed: true인 참여자만 필터링 (확정한 참여자만)
+        const completedParticipants = allParticipants.filter(p => p.completed === true);
+        
+        // 선택한 메뉴 항목 계산 및 pricePerPerson 계산
+        // 정산 완료 여부와 관계없이 completed: true인 참여자 수로 계산
+        // (정산 완료 후에는 더 이상 참여자가 추가되지 않으므로 항상 동일한 결과)
+        const selectedMenuItems = menuItemsArray
+          .filter((item) => {
+            const selectedIds = participant.selectedMenuIds;
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+              return false;
+            }
+            const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
+          })
+          .map((item) => {
+            // completed: true인 참여자만 카운트 (확정한 참여자만)
+            // 정산 완료 후에는 더 이상 변경되지 않으므로 항상 최종 결과
+            const confirmedCount = completedParticipants.filter((p) => {
+              const selectedIds = p.selectedMenuIds;
+              if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                return false;
+              }
+              const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+              return selectedIds.some(id => {
+                const selectedId = typeof id === 'number' ? id : Number(id);
+                return selectedId === menuId;
+              });
+            }).length;
+            
+            // pricePerPerson 계산
+            // 정산 완료 후에는 확정 시점의 참여자 수로 계산된 값 (더 이상 변경되지 않음)
+            const calculatedPricePerPerson = confirmedCount > 0
+              ? Math.floor((item.price || 0) / confirmedCount)
+              : 0;
+            
+            return {
+              name: item.name,
+              price: calculatedPricePerPerson,
+            };
+          });
 
         const totalAmount = selectedMenuItems.reduce(
-          (sum, item) => sum + (item.pricePerPerson || 0),
+          (sum, item) => sum + (item.price || 0),
           0
         );
 
         setSettlementData({
           nickname,
           totalAmount,
-          menuItems: selectedMenuItems.map((item) => ({
-            name: item.name,
-            price: item.pricePerPerson || 0,
-          })),
+          menuItems: selectedMenuItems,
           accountInfo: {
             bank: roomData.host?.bank || "",
             accountNumber: roomData.host?.accountNumber || "",

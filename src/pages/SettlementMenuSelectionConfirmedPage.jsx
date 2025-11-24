@@ -38,8 +38,20 @@ export default function SettlementMenuSelectionConfirmedPage() {
         
         // 메뉴 항목과 참여자 정보 결합
         const menuItemsWithParticipants = menuItemsArray.map((menuItem) => {
-          const participants = Object.values(data.participants || {}).map((participant) => {
-            const isSelected = participant.selectedMenuIds?.includes(menuItem.id) || false;
+          const allParticipants = Object.values(data.participants || {});
+          // completed: true인 참여자만 필터링 (확정한 참여자만)
+          const completedParticipants = allParticipants.filter(p => p.completed === true);
+          
+          const participants = allParticipants.map((participant) => {
+            const selectedIds = participant.selectedMenuIds;
+            // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
+            const menuId = typeof menuItem.id === 'number' ? menuItem.id : Number(menuItem.id);
+            const isSelected = selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0
+              ? selectedIds.some(id => {
+                  const selectedId = typeof id === 'number' ? id : Number(id);
+                  return selectedId === menuId;
+                })
+              : false;
             return {
               name: participant.nickname,
               isSelected: isSelected,
@@ -48,18 +60,40 @@ export default function SettlementMenuSelectionConfirmedPage() {
 
           // 본인이 선택한 메뉴인지 확인
           const userParticipant = data.participants?.[userNickname];
-          const isSelected = userParticipant?.selectedMenuIds?.includes(menuItem.id) || false;
+          const userSelectedIds = userParticipant?.selectedMenuIds;
+          const menuId = typeof menuItem.id === 'number' ? menuItem.id : Number(menuItem.id);
+          const isSelected = userSelectedIds && Array.isArray(userSelectedIds) && userSelectedIds.length > 0
+            ? userSelectedIds.some(id => {
+                const selectedId = typeof id === 'number' ? id : Number(id);
+                return selectedId === menuId;
+              })
+            : false;
 
           const price = menuItem.price || 0;
-          // participantCount는 Firebase에 저장된 값이 있으면 사용, 없으면 현재 선택한 참여자 수로 계산
-          const participantCount = menuItem.participantCount ?? participants.filter(p => p.isSelected).length;
+          
+          // completed: true인 참여자만 카운트 (확정한 참여자만)
+          const confirmedCount = completedParticipants.filter((p) => {
+            const selectedIds = p.selectedMenuIds;
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+              return false;
+            }
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
+          }).length;
+          
+          // ⚠️ 항상 실시간으로 계산 (Firebase에 저장된 값은 신뢰하지 않음)
+          const calculatedPricePerPerson = confirmedCount > 0
+            ? Math.floor(price / confirmedCount)
+            : 0; // 참여자가 없으면 0
           
           return {
             id: menuItem.id,
             name: menuItem.name || '',
             price: price,
-            participantCount: participantCount > 0 ? participantCount : undefined, // 0이면 undefined로 처리
-            pricePerPerson: menuItem.pricePerPerson || (participantCount > 0 ? Math.floor(price / participantCount) : undefined),
+            participantCount: confirmedCount > 0 ? confirmedCount : undefined, // 확정한 참여자만 카운트
+            pricePerPerson: calculatedPricePerPerson, // 항상 실시간 계산값 사용
             isSelected: isSelected,
             participants: participants,
           };
