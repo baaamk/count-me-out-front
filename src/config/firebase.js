@@ -55,15 +55,19 @@ const firebaseConfig = {
 // Firebase 초기화
 const app = initializeApp(firebaseConfig);
 
+// 디버깅: databaseURL 확인
+console.log("Firebase databaseURL:", firebaseConfig.databaseURL);
+console.log("Firebase databaseURL 길이:", firebaseConfig.databaseURL?.length);
+console.log("Firebase databaseURL 끝:", firebaseConfig.databaseURL?.slice(-10));
+
 // Firebase 서비스 초기화
 export const auth = getAuth(app);
 export const firestore = getFirestore(app);
 export const functions = getFunctions(app);
 
 // Realtime Database 초기화
-// databaseURL을 명시적으로 전달하여 URL 잘림 문제 방지
-const databaseURL = firebaseConfig.databaseURL;
-export const database = getDatabase(app, databaseURL);
+// Firebase v9+에서는 getDatabase(app)만 사용하면 자동으로 firebaseConfig에서 databaseURL을 가져옵니다
+export const database = getDatabase(app);
 
 export default app;
 

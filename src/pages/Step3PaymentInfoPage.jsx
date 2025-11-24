@@ -169,12 +169,17 @@ export default function Step3PaymentInfoPage() {
           bank: bank,
           accountNumber: accountNumber,
         },
-        menuItems: menuItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-        })),
+        menuItems: menuItems.reduce((acc, item) => {
+          // 규칙에서 id는 숫자여야 하므로 숫자로 변환
+          const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+          acc[menuId] = {
+            id: menuId,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+          };
+          return acc;
+        }, {}),
         participants: {
           [nickname.trim()]: {
             nickname: nickname.trim(),

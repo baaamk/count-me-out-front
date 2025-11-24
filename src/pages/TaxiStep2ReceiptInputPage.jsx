@@ -228,7 +228,6 @@ export default function TaxiStep2ReceiptInputPage() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             onChange={handleFileChange}
             className="hidden"
           />

@@ -21,7 +21,7 @@
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
           },
           "kakaoPayCode": {
-            ".validate": "newData.isString() || newData.val() === null"
+            ".validate": "(newData.isString() && newData.val().length > 0 && newData.val().length <= 20) || newData.val() === null"
           },
           "bank": {
             ".validate": "newData.isString() && newData.val().length > 0"
@@ -115,6 +115,9 @@
             "isHost": {
               ".validate": "newData.isBoolean()"
             },
+            "uid": {
+              ".validate": "newData.isString() || newData.val() === null"
+            },
             "selectedMenuIds": {
               ".validate": "newData.hasChildren() || newData.val() === null"
             },
@@ -149,9 +152,7 @@
         "currentParticipants": {
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= newData.parent().parent().child('totalParticipants').val()"
         }
-      },
-      ".read": false,
-      ".write": false
+      }
     }
   }
 }
