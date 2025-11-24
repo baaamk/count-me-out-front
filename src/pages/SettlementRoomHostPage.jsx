@@ -13,6 +13,8 @@ export default function SettlementRoomHostPage() {
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [currentParticipants, setCurrentParticipants] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [roomData, setRoomData] = useState(null);
+  const [hostSelectedMenuIds, setHostSelectedMenuIds] = useState([]);
   
   const roomId = location.state?.roomId;
 
@@ -29,6 +31,16 @@ export default function SettlementRoomHostPage() {
     const unsubscribe = onValue(roomRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        setRoomData(data); // roomData를 state에 저장
+        
+        // 방장의 selectedMenuIds 가져오기
+        const hostParticipant = Object.values(data.participants || {}).find(p => p.isHost === true);
+        const hostSelectedIds = hostParticipant?.selectedMenuIds;
+        const hostSelected = hostSelectedIds && Array.isArray(hostSelectedIds) && hostSelectedIds.length > 0
+          ? hostSelectedIds.map(id => typeof id === 'number' ? id : Number(id))
+          : [];
+        setHostSelectedMenuIds(hostSelected);
+        
         // menuItems를 배열로 변환 (객체인 경우 Object.values 사용)
         const menuItemsArray = Array.isArray(data.menuItems)
           ? data.menuItems
@@ -41,8 +53,12 @@ export default function SettlementRoomHostPage() {
           const participants = Object.values(data.participants || {}).map((participant) => {
             // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
             const selectedIds = participant.selectedMenuIds;
+            const menuId = typeof menuItem.id === 'number' ? menuItem.id : Number(menuItem.id);
             const isSelected = selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0
-              ? selectedIds.includes(menuItem.id)
+              ? selectedIds.some(id => {
+                  const selectedId = typeof id === 'number' ? id : Number(id);
+                  return selectedId === menuId;
+                })
               : false;
             return {
               name: participant.nickname,
@@ -70,16 +86,22 @@ export default function SettlementRoomHostPage() {
             });
           }).length;
           
-          // Firebase에 저장된 값이 있으면 우선 사용, 없으면 실시간 계산값 사용
-          const participantCount = menuItem.participantCount ?? selectedCount;
+          // 항상 실시간 계산값 사용 (Firebase 저장값 무시)
+          const participantCount = selectedCount;
+          const calculatedPricePerPerson = participantCount > 0 
+            ? Math.floor(price / participantCount) 
+            : undefined;
+          
+          // 방장이 선택한 메뉴인지 확인
+          const isHostSelected = hostSelected.includes(menuId);
           
           return {
             id: menuItem.id,
             name: menuItem.name || '',
             price: price,
             participantCount: participantCount > 0 ? participantCount : undefined, // 0이면 undefined로 처리
-            pricePerPerson: menuItem.pricePerPerson || (participantCount > 0 ? Math.floor(price / participantCount) : undefined),
-            isSelected: false, // 방장은 선택하지 않음
+            pricePerPerson: calculatedPricePerPerson, // 항상 실시간 계산값 사용
+            isSelected: isHostSelected, // 방장이 선택한 메뉴인지 표시
             participants: participants,
           };
         });
@@ -257,8 +279,27 @@ export default function SettlementRoomHostPage() {
   // 본인이 선택한 메뉴 항목만 필터링
   const selectedItems = menuItemsState.filter((item) => item.isSelected);
 
-  // 총 합계 계산
-  const totalAmount = selectedItems.reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+  // 총 합계 계산 (실시간으로 pricePerPerson 계산)
+  const totalAmount = selectedItems.reduce((sum, item) => {
+    // 실시간으로 pricePerPerson 계산
+    const allParticipants = Object.values(roomData?.participants || {});
+    const completedParticipants = allParticipants.filter(p => p.completed === true);
+    const confirmedCount = completedParticipants.filter((p) => {
+      const selectedIds = p.selectedMenuIds;
+      if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+        return false;
+      }
+      const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+      return selectedIds.some(id => {
+        const selectedId = typeof id === 'number' ? id : Number(id);
+        return selectedId === menuId;
+      });
+    }).length;
+    const pricePerPerson = confirmedCount > 0 
+      ? Math.floor((item.price || 0) / confirmedCount)
+      : item.price || 0;
+    return sum + pricePerPerson;
+  }, 0);
   
   // 방장이 메뉴 선택을 완료했는지 확인 (선택한 메뉴가 있는지)
   const hasHostSelectedMenu = selectedItems.length > 0;
@@ -387,18 +428,38 @@ export default function SettlementRoomHostPage() {
               <div className="bg-[#e6e6e6] h-px shrink-0 w-full" />
 
               {/* Selected Items */}
-              <div className="flex flex-col gap-2 h-[60px] items-start px-0 py-2 shrink-0 w-full">
-                {selectedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex h-6 items-center justify-between text-sm w-full"
-                  >
-                    <p className="font-medium text-[#4d4d4d]">{item.name}</p>
-                    <p className="font-semibold text-[#1a1a1a]">
-                      {(item.pricePerPerson || 0).toLocaleString()}원
-                    </p>
-                  </div>
-                ))}
+              <div className="flex flex-col gap-2 h-[60px] items-start px-0 py-2 shrink-0 w-full overflow-y-auto">
+                {selectedItems.map((item) => {
+                  // 실시간으로 pricePerPerson 계산
+                  const allParticipants = Object.values(roomData?.participants || {});
+                  const completedParticipants = allParticipants.filter(p => p.completed === true);
+                  const confirmedCount = completedParticipants.filter((p) => {
+                    const selectedIds = p.selectedMenuIds;
+                    if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                      return false;
+                    }
+                    const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+                    return selectedIds.some(id => {
+                      const selectedId = typeof id === 'number' ? id : Number(id);
+                      return selectedId === menuId;
+                    });
+                  }).length;
+                  const pricePerPerson = confirmedCount > 0 
+                    ? Math.floor((item.price || 0) / confirmedCount)
+                    : item.price || 0;
+                  
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex h-6 items-center justify-between text-sm w-full"
+                    >
+                      <p className="font-medium text-[#4d4d4d]">{item.name}</p>
+                      <p className="font-semibold text-[#1a1a1a]">
+                        {pricePerPerson.toLocaleString()}원
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Bottom Divider */}
