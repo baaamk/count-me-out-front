@@ -129,9 +129,26 @@ export default function MyPage() {
         }
       } catch (error) {
         console.error("사용자 데이터 조회 실패:", error);
-        setUserData(null);
-        setAccountData(null);
-        setSettlementHistory(null);
+        
+        // 권한 오류가 발생해도 기본값으로 설정하여 페이지가 표시되도록 함
+        const email = user.email || "";
+        const displayEmail = email.includes("@countmeout.internal") ? "" : email;
+        
+        setUserData({
+          nickname: user.displayName || "",
+          email: displayEmail,
+          avatar: user.photoURL || "👤",
+        });
+        setAccountData({
+          bank: "",
+          accountNumber: "",
+          kakaoPayCode: "",
+        });
+        setSettlementHistory({
+          thisMonth: 0,
+          lastMonth: 0,
+          difference: 0,
+        });
       }
 
       setLoading(false);

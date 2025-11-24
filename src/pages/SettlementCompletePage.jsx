@@ -33,11 +33,13 @@ export default function SettlementCompletePage() {
             : [];
           
           const participants = Object.values(roomData.participants || {});
+          // completed: true인 참여자만 필터링 (메뉴 선택을 확정한 참여자만)
+          const completedParticipants = participants.filter(p => p.completed === true && 
+            p.selectedMenuIds && Array.isArray(p.selectedMenuIds) && p.selectedMenuIds.length > 0);
           
           // 각 메뉴별로 실시간으로 pricePerPerson 계산
           const menuItemsWithPricePerPerson = menuItemsArray.map((item) => {
             // completed: true인 참여자만 카운트 (확정한 참여자만)
-            const completedParticipants = participants.filter(p => p.completed === true);
             const confirmedCount = completedParticipants.filter((p) => {
               const selectedIds = p.selectedMenuIds;
               // null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
@@ -64,8 +66,8 @@ export default function SettlementCompletePage() {
             };
           });
           
-          // 참여자별 금액 계산
-          const participantAmounts = participants.map((p) => {
+          // 참여자별 금액 계산 (completed 참여자만)
+          const participantAmounts = completedParticipants.map((p) => {
             // 참여자가 선택한 메뉴들의 pricePerPerson 합산
             const selectedMenuIds = p.selectedMenuIds || [];
             const amount = menuItemsWithPricePerPerson
@@ -88,10 +90,10 @@ export default function SettlementCompletePage() {
           const totalSettlementAmount = participantAmounts.reduce((sum, amount) => sum + amount, 0);
           
           setSettlementData({
-            totalAmount: totalSettlementAmount, // 참여자별 금액 합계로 변경
-            participantCount: participants.length,
+            totalAmount: totalSettlementAmount, // 참여자별 금액 합계
+            participantCount: completedParticipants.length, // completed 참여자 수만 카운트
             date: new Date(roomData.createdAt).toLocaleDateString("ko-KR"),
-            participants: participants.map((p, index) => {
+            participants: completedParticipants.map((p, index) => {
               // 참여자가 선택한 메뉴들의 pricePerPerson 합산
               const selectedMenuIds = p.selectedMenuIds || [];
               const amount = participantAmounts[index]; // 이미 계산된 금액 사용
