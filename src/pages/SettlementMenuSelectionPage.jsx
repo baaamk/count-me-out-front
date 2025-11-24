@@ -324,8 +324,8 @@ export default function SettlementMenuSelectionPage() {
                       </p>
                       <p className="font-normal text-xs text-gray-500 truncate">
                         {(item.price || 0).toLocaleString()}원
-                        {confirmedCount > 0 && (
-                          <> • {confirmedCount}명 참여 • {(realTimePricePerPerson || 0).toLocaleString()}원/인</>
+                        {confirmedCount > 0 && realTimePricePerPerson !== undefined && (
+                          <> • {confirmedCount}명 참여 • {realTimePricePerPerson.toLocaleString()}원/인</>
                         )}
                       </p>
                     </div>

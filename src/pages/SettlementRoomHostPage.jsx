@@ -259,13 +259,48 @@ export default function SettlementRoomHostPage() {
         const participants = Object.values(roomData.participants || {});
         const totalAmount = menuItemsArray.reduce((sum, item) => sum + (item.price || 0), 0);
 
+        // 각 메뉴별로 실시간으로 pricePerPerson 계산
+        const menuItemsWithPricePerPerson = menuItemsArray.map((item) => {
+          // completed: true인 참여자만 카운트 (확정한 참여자만)
+          const completedParticipants = participants.filter(p => p.completed === true);
+          const confirmedCount = completedParticipants.filter((p) => {
+            const selectedIds = p.selectedMenuIds;
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+              return false;
+            }
+            const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
+          }).length;
+          
+          // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+          const calculatedPricePerPerson = confirmedCount > 0
+            ? Math.floor((item.price || 0) / confirmedCount)
+            : item.price || 0;
+          
+          return {
+            ...item,
+            pricePerPerson: item.pricePerPerson ?? calculatedPricePerPerson,
+          };
+        });
+
         for (const participant of participants) {
           if (participant.uid) {
             // 로그인한 사용자만 Firestore에 저장
             try {
               const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
-              const participantAmount = menuItemsArray
-                .filter((item) => participant.selectedMenuIds?.includes(item.id))
+              // 참여자가 선택한 메뉴들의 pricePerPerson 합산 (실시간 계산값 사용)
+              const selectedMenuIds = participant.selectedMenuIds || [];
+              const participantAmount = menuItemsWithPricePerPerson
+                .filter((item) => {
+                  const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+                  return selectedMenuIds.some(id => {
+                    const selectedId = typeof id === 'number' ? id : Number(id);
+                    return selectedId === itemId;
+                  });
+                })
                 .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
 
               await setDoc(userSettlementRef, {
