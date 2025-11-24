@@ -44,18 +44,21 @@ export default function SettlementMenuSelectionPage() {
         const completedParticipants = allParticipants.filter(p => p.completed === true);
         
         const safeItems = items.map(item => {
-          // 각 메뉴 항목에 대한 참여자 정보 계산
-          const participants = allParticipants.map((participant) => {
-            const selectedIds = participant.selectedMenuIds;
-            const isSelected = selectedIds && Array.isArray(selectedIds) 
-              ? selectedIds.includes(item.id)
-              : false;
-            return {
-              name: participant.nickname,
-              isSelected: isSelected,
-              isCompleted: participant.completed === true,
-            };
-          });
+          // 각 메뉴 항목에 대한 참여자 정보 계산 (방장 제외)
+          const participants = allParticipants
+            .filter(p => !p.isHost) // 방장 제외
+            .map((participant) => {
+              const selectedIds = participant.selectedMenuIds;
+              // selectedMenuIds가 null이거나 배열이 아니면 선택하지 않은 것으로 처리
+              const isSelected = selectedIds && Array.isArray(selectedIds) 
+                ? selectedIds.includes(item.id)
+                : false;
+              return {
+                name: participant.nickname,
+                isSelected: isSelected,
+                isCompleted: participant.completed === true,
+              };
+            });
           
           // completed: true인 참여자만 카운트 (확정한 참여자만)
           const confirmedCount = completedParticipants.filter((p) => {
@@ -100,12 +103,20 @@ export default function SettlementMenuSelectionPage() {
           const participant = data.participants?.[userNickname];
           if (participant) {
             const participantSelectedIds = participant.selectedMenuIds;
-            if (participantSelectedIds && Array.isArray(participantSelectedIds) && participantSelectedIds.length > 0) {
+            // null이거나 배열이 아니면 빈 배열로 초기화
+            if (participantSelectedIds && Array.isArray(participantSelectedIds)) {
               setSelectedMenuIds(participantSelectedIds);
             } else {
+              // 처음 입장하거나 selectedMenuIds가 null인 경우 빈 배열로 초기화
               setSelectedMenuIds([]);
             }
+          } else {
+            // 참여자 정보가 없으면 빈 배열로 초기화
+            setSelectedMenuIds([]);
           }
+        } else if (!isHost && !userNickname) {
+          // 참여자인데 userNickname이 아직 설정되지 않은 경우 빈 배열로 초기화
+          setSelectedMenuIds([]);
         }
       }
       setLoading(false);
