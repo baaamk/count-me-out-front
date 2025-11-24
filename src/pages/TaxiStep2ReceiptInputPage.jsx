@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import MobileLayout from "../layouts/MobileLayout";
 import StepIndicator from "../components/settlement/StepIndicator";
 import InputOptions from "../components/settlement/InputOptions";
@@ -13,6 +13,8 @@ export default function TaxiStep2ReceiptInputPage() {
   const fileInputRef = useRef(null);
   const [departure, setDeparture] = useState("");
   const [arrival, setArrival] = useState("");
+  const [departureLocation, setDepartureLocation] = useState(null); // {lat, lng}
+  const [arrivalLocation, setArrivalLocation] = useState(null); // {lat, lng}
   const [totalAmount, setTotalAmount] = useState("");
   const [isEditingDeparture, setIsEditingDeparture] = useState(false); // 출발지 수정 모드
   const [isEditingArrival, setIsEditingArrival] = useState(false); // 도착지 수정 모드
@@ -23,6 +25,12 @@ export default function TaxiStep2ReceiptInputPage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
+  const [departureSearchResults, setDepartureSearchResults] = useState([]);
+  const [showDepartureResults, setShowDepartureResults] = useState(false);
+  const [arrivalSearchResults, setArrivalSearchResults] = useState([]);
+  const [showArrivalResults, setShowArrivalResults] = useState(false);
+  const departureSearchTimeoutRef = useRef(null);
+  const arrivalSearchTimeoutRef = useRef(null);
 
   const handlePhotoInput = () => {
     // 파일 입력 트리거
@@ -137,6 +145,218 @@ export default function TaxiStep2ReceiptInputPage() {
     setTotalAmount(formatted);
   };
 
+  // 장소 검색 함수 (네이버 검색 API 사용)
+  const handleLocationSearch = async (query, isDeparture) => {
+    if (!query.trim()) {
+      if (isDeparture) {
+        setDepartureSearchResults([]);
+        setShowDepartureResults(false);
+      } else {
+        setArrivalSearchResults([]);
+        setShowArrivalResults(false);
+      }
+      return;
+    }
+
+    try {
+      // Firebase Functions를 통해 네이버 검색 API 호출
+      // Firebase Functions v2는 두 가지 URL 형식을 지원합니다:
+      // 1. https://[region]-[project-id].cloudfunctions.net/[function-name] (v1 호환)
+      // 2. https://[function-name]-[hash]-[region].a.run.app (v2 전용)
+      const searchPlacesUrl = import.meta.env.VITE_FIREBASE_SEARCH_PLACES_URL || 
+        "https://us-central1-countmeout-21e99.cloudfunctions.net/searchPlaces";
+      
+      console.log("장소 검색 API 호출:", searchPlacesUrl);
+      
+      const response = await fetch(`${searchPlacesUrl}?query=${encodeURIComponent(query.trim())}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `검색 API 호출 실패: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.items) {
+        throw new Error(data.error || "검색 결과를 가져올 수 없습니다.");
+      }
+      
+      if (data.items && data.items.length > 0) {
+        // 네이버 지도 SDK 로드 대기 (좌표 변환용)
+        const waitForNaverMaps = () => {
+          return new Promise((resolve) => {
+            if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.Geocoder) {
+              resolve();
+              return;
+            }
+            
+            let retryCount = 0;
+            const maxRetries = 30;
+            
+            const checkInterval = setInterval(() => {
+              if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.Geocoder) {
+                clearInterval(checkInterval);
+                resolve();
+              } else if (retryCount >= maxRetries) {
+                clearInterval(checkInterval);
+                resolve();
+              }
+              retryCount++;
+            }, 100);
+          });
+        };
+
+        // 네이버 검색 API의 mapx, mapy를 위도/경도로 변환
+        // mapx, mapy는 네이버 좌표계이며, WGS84로 변환: 위도 = mapy / 10000000, 경도 = mapx / 10000000
+        const results = data.items.map((item, index) => {
+          let lat = 37.5665; // 기본값
+          let lng = 126.9780; // 기본값
+          
+          // 네이버 검색 API에서 제공하는 좌표 변환
+          if (item.mapx && item.mapy) {
+            // 네이버 좌표계를 WGS84로 변환
+            lat = parseFloat(item.mapy) / 10000000;
+            lng = parseFloat(item.mapx) / 10000000;
+          }
+          
+          return {
+            id: item.link || `place-${index}`,
+            name: item.title?.replace(/<[^>]*>/g, '') || query, // HTML 태그 제거
+            address: item.roadAddress || item.address || "",
+            lat: lat,
+            lng: lng,
+          };
+        });
+        
+        if (isDeparture) {
+          setDepartureSearchResults(results);
+          setShowDepartureResults(true);
+        } else {
+          setArrivalSearchResults(results);
+          setShowArrivalResults(true);
+        }
+      } else {
+        // 검색 결과 없음
+        if (isDeparture) {
+          setDepartureSearchResults([]);
+          setShowDepartureResults(true);
+        } else {
+          setArrivalSearchResults([]);
+          setShowArrivalResults(true);
+        }
+      }
+    } catch (error) {
+      console.error("검색 중 오류:", error);
+      // 에러 발생 시 빈 결과 표시
+      if (isDeparture) {
+        setDepartureSearchResults([]);
+        setShowDepartureResults(true);
+      } else {
+        setArrivalSearchResults([]);
+        setShowArrivalResults(true);
+      }
+    }
+  };
+
+  // 출발지 검색어 변경 핸들러 (디바운싱)
+  const handleDepartureSearchChange = (e) => {
+    const query = e.target.value;
+    setDeparture(query);
+
+    if (departureSearchTimeoutRef.current) {
+      clearTimeout(departureSearchTimeoutRef.current);
+    }
+
+    departureSearchTimeoutRef.current = setTimeout(() => {
+      if (query.trim()) {
+        handleLocationSearch(query, true);
+      } else {
+        setDepartureSearchResults([]);
+        setShowDepartureResults(false);
+      }
+    }, 300);
+  };
+
+  // 도착지 검색어 변경 핸들러 (디바운싱)
+  const handleArrivalSearchChange = (e) => {
+    const query = e.target.value;
+    setArrival(query);
+
+    if (arrivalSearchTimeoutRef.current) {
+      clearTimeout(arrivalSearchTimeoutRef.current);
+    }
+
+    arrivalSearchTimeoutRef.current = setTimeout(() => {
+      if (query.trim()) {
+        handleLocationSearch(query, false);
+      } else {
+        setArrivalSearchResults([]);
+        setShowArrivalResults(false);
+      }
+    }, 300);
+  };
+
+  // 검색 결과 선택
+  const handleSelectDepartureResult = (result) => {
+    setDeparture(result.name);
+    setDepartureLocation({ lat: result.lat, lng: result.lng });
+    setShowDepartureResults(false);
+    setIsEditingDeparture(false);
+  };
+
+  const handleSelectArrivalResult = (result) => {
+    setArrival(result.name);
+    setArrivalLocation({ lat: result.lat, lng: result.lng });
+    setShowArrivalResults(false);
+    setIsEditingArrival(false);
+  };
+
+  // 외부 클릭 시 검색 결과 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDepartureResults || showArrivalResults) {
+        const target = event.target;
+        // 검색 결과 드롭다운 내부 클릭이 아닌 경우
+        if (!target.closest('.search-results-dropdown')) {
+          setShowDepartureResults(false);
+          setShowArrivalResults(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDepartureResults, showArrivalResults]);
+
+  // 마커 배열 메모이제이션 (무한 루프 방지)
+  const mapMarkers = useMemo(() => {
+    const markers = [];
+    if (departure && departureLocation) {
+      markers.push({
+        lat: departureLocation.lat,
+        lng: departureLocation.lng,
+        name: departure,
+        color: "#3366cc",
+      });
+    }
+    if (arrival && arrivalLocation) {
+      markers.push({
+        lat: arrivalLocation.lat,
+        lng: arrivalLocation.lng,
+        name: arrival,
+        color: "#ff6b6b",
+      });
+    }
+    return markers;
+  }, [departure, arrival, departureLocation, arrivalLocation]);
+
   const handlePrevious = () => {
     navigate("/taxi/settlement/start");
   };
@@ -148,11 +368,45 @@ export default function TaxiStep2ReceiptInputPage() {
       return;
     }
     
-    // 출발지/도착지 좌표 가져오기 (네이버 지도 Geocoder API 사용)
-    let departureInfo = { name: departure, lat: 37.5572, lng: 126.9234 }; // 기본값
-    let arrivalInfo = { name: arrival, lat: 37.4980, lng: 127.0276 }; // 기본값
+    // 출발지/도착지 좌표 가져오기
+    // 검색 결과에서 선택한 좌표가 있으면 사용, 없으면 Geocoder로 검색
+    let departureInfo = departureLocation 
+      ? { name: departure, lat: departureLocation.lat, lng: departureLocation.lng }
+      : { name: departure, lat: 37.5572, lng: 126.9234 }; // 기본값
+    let arrivalInfo = arrivalLocation
+      ? { name: arrival, lat: arrivalLocation.lat, lng: arrivalLocation.lng }
+      : { name: arrival, lat: 37.4980, lng: 127.0276 }; // 기본값
     
-    if (window.naver && window.naver.maps) {
+    // 좌표가 없으면 Geocoder로 검색 (기존 로직 유지)
+    if (!departureLocation || !arrivalLocation) {
+      // 네이버 지도 SDK 및 Geocoder 로드 대기
+    const waitForNaverMaps = () => {
+      return new Promise((resolve) => {
+        if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.Geocoder) {
+          resolve();
+          return;
+        }
+        
+        let retryCount = 0;
+        const maxRetries = 50; // 최대 5초 대기 (100ms * 50)
+        
+        const checkInterval = setInterval(() => {
+          if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.Geocoder) {
+            clearInterval(checkInterval);
+            resolve();
+          } else if (retryCount >= maxRetries) {
+            clearInterval(checkInterval);
+            console.warn("네이버 지도 Geocoder 로드 실패, 기본 좌표 사용");
+            resolve(); // 타임아웃되어도 계속 진행 (기본값 사용)
+          }
+          retryCount++;
+        }, 100);
+      });
+    };
+    
+    await waitForNaverMaps();
+    
+    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.Geocoder) {
       try {
         const geocoder = new window.naver.maps.Service.Geocoder();
         
@@ -187,8 +441,12 @@ export default function TaxiStep2ReceiptInputPage() {
         });
       } catch (error) {
         console.error("좌표 검색 오류:", error);
+        // 에러 발생 시 기본값 사용 (이미 설정되어 있음)
       }
+    } else {
+      console.warn("네이버 지도 Geocoder를 사용할 수 없습니다. 기본 좌표를 사용합니다.");
     }
+    } // if (!departureLocation || !arrivalLocation) 블록 종료
     
     // 항상 3단계(결제 정보 입력)로 이동 (출발지/도착지 정보 전달)
     navigate("/taxi/settlement/step3", {
@@ -273,16 +531,38 @@ export default function TaxiStep2ReceiptInputPage() {
                 <div className="flex h-6 items-center shrink-0 w-[99px]">
                   <label className="font-semibold text-sm text-[#1a1a1a]">출발지</label>
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 relative">
                   {isEditingDeparture ? (
-                    <input
-                      type="text"
-                      placeholder="입력 또는 지도 선택"
-                      value={departure}
-                      onChange={(e) => setDeparture(e.target.value)}
-                      className="bg-transparent border-0 h-auto w-full text-sm font-bold text-[#1a1a1a] outline-none placeholder:text-gray-500"
-                      autoFocus
-                    />
+                    <>
+                      <input
+                        type="text"
+                        placeholder="입력 또는 지도 선택"
+                        value={departure}
+                        onChange={handleDepartureSearchChange}
+                        className="bg-transparent border-0 h-auto w-full text-sm font-bold text-[#1a1a1a] outline-none placeholder:text-gray-500"
+                        autoFocus
+                      />
+                      {showDepartureResults && (
+                        <div className="search-results-dropdown absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                          {departureSearchResults.length > 0 ? (
+                            departureSearchResults.map((result) => (
+                              <button
+                                key={result.id}
+                                onClick={() => handleSelectDepartureResult(result)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors"
+                              >
+                                <p className="font-semibold text-sm text-[#1a1a1a]">{result.name}</p>
+                                {result.address && result.address !== result.name && (
+                                  <p className="text-xs text-gray-500">{result.address}</p>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-2 text-sm text-gray-500">검색 결과가 없습니다</div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p 
                       onClick={() => setIsEditingDeparture(true)}
@@ -322,16 +602,38 @@ export default function TaxiStep2ReceiptInputPage() {
                 <div className="flex h-6 items-center shrink-0 w-[99px]">
                   <label className="font-semibold text-sm text-[#1a1a1a]">도착지</label>
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 relative">
                   {isEditingArrival ? (
-                    <input
-                      type="text"
-                      placeholder="입력 또는 지도 선택"
-                      value={arrival}
-                      onChange={(e) => setArrival(e.target.value)}
-                      className="bg-transparent border-0 h-auto w-full text-sm font-bold text-[#1a1a1a] outline-none placeholder:text-gray-500"
-                      autoFocus
-                    />
+                    <>
+                      <input
+                        type="text"
+                        placeholder="입력 또는 지도 선택"
+                        value={arrival}
+                        onChange={handleArrivalSearchChange}
+                        className="bg-transparent border-0 h-auto w-full text-sm font-bold text-[#1a1a1a] outline-none placeholder:text-gray-500"
+                        autoFocus
+                      />
+                      {showArrivalResults && (
+                        <div className="search-results-dropdown absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                          {arrivalSearchResults.length > 0 ? (
+                            arrivalSearchResults.map((result) => (
+                              <button
+                                key={result.id}
+                                onClick={() => handleSelectArrivalResult(result)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors"
+                              >
+                                <p className="font-semibold text-sm text-[#1a1a1a]">{result.name}</p>
+                                {result.address && result.address !== result.name && (
+                                  <p className="text-xs text-gray-500">{result.address}</p>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-2 text-sm text-gray-500">검색 결과가 없습니다</div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p 
                       onClick={() => setIsEditingArrival(true)}
@@ -375,32 +677,27 @@ export default function TaxiStep2ReceiptInputPage() {
                 <NaverMap
                   width="100%"
                   height={140}
-                  centerLat={37.5665}
-                  centerLng={126.9780}
-                  level={5}
+                  centerLat={
+                    departureLocation && arrivalLocation
+                      ? (departureLocation.lat + arrivalLocation.lat) / 2
+                      : departureLocation
+                      ? departureLocation.lat
+                      : arrivalLocation
+                      ? arrivalLocation.lat
+                      : 37.5665
+                  }
+                  centerLng={
+                    departureLocation && arrivalLocation
+                      ? (departureLocation.lng + arrivalLocation.lng) / 2
+                      : departureLocation
+                      ? departureLocation.lng
+                      : arrivalLocation
+                      ? arrivalLocation.lng
+                      : 126.9780
+                  }
+                  level={departureLocation && arrivalLocation ? 8 : 5}
                   clickable={false}
-                  markers={[
-                    ...(departure
-                      ? [
-                          {
-                            lat: 37.5563,
-                            lng: 126.9230,
-                            name: "출발지",
-                            color: "#3366cc",
-                          },
-                        ]
-                      : []),
-                    ...(arrival
-                      ? [
-                          {
-                            lat: 37.4980,
-                            lng: 127.0276,
-                            name: "도착지",
-                            color: "#ff6b6b",
-                          },
-                        ]
-                      : []),
-                  ]}
+                  markers={mapMarkers}
                   draggable={true}
                 />
               </div>

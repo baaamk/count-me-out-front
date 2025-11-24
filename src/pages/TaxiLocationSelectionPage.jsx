@@ -52,7 +52,7 @@ export default function TaxiLocationSelectionPage() {
     setShowSearchResults(false);
   };
 
-  // 장소 검색 (네이버 지도 Geocoder API 사용)
+  // 장소 검색 (Firebase Functions를 통해 네이버 검색 API 사용)
   const handleSearch = async (query) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -60,34 +60,63 @@ export default function TaxiLocationSelectionPage() {
       return;
     }
 
-    if (!window.naver || !window.naver.maps) {
-      console.error("네이버 지도 SDK가 로드되지 않았습니다");
-      return;
-    }
-
     try {
-      const geocoder = new window.naver.maps.Service.Geocoder();
+      // Firebase Functions를 통해 네이버 검색 API 호출
+      const searchPlacesUrl = import.meta.env.VITE_FIREBASE_SEARCH_PLACES_URL || 
+        "https://us-central1-countmeout-21e99.cloudfunctions.net/searchPlaces";
       
-      geocoder.addressSearch(query, (status, response) => {
-        if (status === window.naver.maps.Service.Status.OK) {
-          const results = response.result.items.slice(0, 5).map((place, index) => ({
-            id: place.address || `place-${index}`,
-            name: place.address || place.title || query,
-            address: place.address || place.title || "",
-            lat: parseFloat(place.point.y),
-            lng: parseFloat(place.point.x),
-          }));
-          setSearchResults(results);
-          setShowSearchResults(true);
-        } else if (status === window.naver.maps.Service.Status.ZERO_RESULT) {
-          setSearchResults([]);
-          setShowSearchResults(true);
-        } else {
-          console.error("장소 검색 실패:", status);
-        }
+      const response = await fetch(`${searchPlacesUrl}?query=${encodeURIComponent(query.trim())}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `검색 API 호출 실패: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.items) {
+        throw new Error(data.error || "검색 결과를 가져올 수 없습니다.");
+      }
+      
+      if (data.items && data.items.length > 0) {
+        // 네이버 검색 API의 mapx, mapy를 위도/경도로 변환
+        const results = data.items.map((item, index) => {
+          let lat = 37.5665; // 기본값
+          let lng = 126.9780; // 기본값
+          
+          // 네이버 검색 API에서 제공하는 좌표 변환
+          if (item.mapx && item.mapy) {
+            // 네이버 좌표계를 WGS84로 변환
+            lat = parseFloat(item.mapy) / 10000000;
+            lng = parseFloat(item.mapx) / 10000000;
+          }
+          
+          return {
+            id: item.link || `place-${index}`,
+            name: item.title?.replace(/<[^>]*>/g, '') || query, // HTML 태그 제거
+            address: item.roadAddress || item.address || "",
+            lat: lat,
+            lng: lng,
+          };
+        });
+        
+        setSearchResults(results);
+        setShowSearchResults(true);
+      } else {
+        // 검색 결과 없음
+        setSearchResults([]);
+        setShowSearchResults(true);
+      }
     } catch (error) {
       console.error("검색 중 오류:", error);
+      // 에러 발생 시 빈 결과 표시
+      setSearchResults([]);
+      setShowSearchResults(true);
     }
   };
 
@@ -112,10 +141,17 @@ export default function TaxiLocationSelectionPage() {
 
   // 검색 결과 선택
   const handleSelectSearchResult = (result) => {
-    setSelectedLocation({ lat: result.lat, lng: result.lng });
-    setMapCenter({ lat: result.lat, lng: result.lng });
+    console.log("검색 결과 선택:", result);
+    const location = { lat: result.lat, lng: result.lng };
+    setSelectedLocation(location);
+    setMapCenter(location); // 지도 중심 이동
     setSearchQuery(result.name);
     setShowSearchResults(false);
+    // 지도가 업데이트되도록 강제 리렌더링을 위한 작은 딜레이
+    setTimeout(() => {
+      // 지도 중심이 업데이트되었는지 확인
+      console.log("선택된 위치:", location);
+    }, 100);
   };
 
   const handleSelectTeamMemberLocation = (memberName) => {

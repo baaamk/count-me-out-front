@@ -194,6 +194,7 @@ export default function TaxiLocationSelectionHostPage() {
     
     const calculateRoute = async () => {
       setIsCalculatingRoute(true);
+      console.log("경로 계산 시작");
       try {
         // 출발지, 경유지, 도착지 좌표 준비
         // 네이버 Directions 5 API 형식: "경도,위도" (경도가 먼저!)
@@ -226,13 +227,31 @@ export default function TaxiLocationSelectionHostPage() {
           waypoints,
         };
         
-        const response = await fetch(calculateRouteUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
+        // 타임아웃 설정 (10초로 단축)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn("경로 계산 API 타임아웃 (10초 초과)");
+        }, 10000);
+        
+        let response;
+        try {
+          response = await fetch(calculateRouteUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error("경로 계산이 시간 초과되었습니다. 대체 계산을 사용합니다.");
+          }
+          throw fetchError;
+        }
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -301,6 +320,13 @@ export default function TaxiLocationSelectionHostPage() {
         }
       } catch (error) {
         console.error("경로 계산 오류:", error);
+        if (error.name === 'AbortError') {
+          console.error("경로 계산 타임아웃 (30초 초과)");
+          alert("경로 계산이 시간 초과되었습니다. 다시 시도해주세요.");
+        } else {
+          console.error("경로 계산 실패:", error.message);
+          // 에러 메시지를 사용자에게 표시하지 않고 대체 계산 사용
+        }
         // Firebase Functions가 없으면 간단한 거리 계산으로 대체
         const allPoints = [
           { lat: departureInfo.lat, lng: departureInfo.lng },

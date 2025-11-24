@@ -440,3 +440,101 @@ exports.calculateRoute = onRequest(
   }
 );
 
+// 네이버 검색 API - 장소 검색 프록시 함수 (2nd Gen)
+exports.searchPlaces = onRequest(
+  {
+    cors: true, // CORS 자동 처리
+    region: "us-central1",
+    timeoutSeconds: 30,
+    memory: "256Mi",
+    // 환경 변수 설정 방법:
+    // 1. Google Cloud Console에서 설정:
+    //    - Google Cloud Console > Cloud Functions > searchPlaces 선택
+    //    - "편집" 클릭 > "환경 변수, 네트워킹, 타임아웃 등" 섹션
+    //    - "환경 변수 추가" 클릭
+    //    - NAVER_CLIENT_ID, NAVER_CLIENT_SECRET 추가
+    //    - 저장 후 함수 재배포 필요
+    // 2. 또는 Firebase CLI로 설정:
+    //    - firebase functions:config:set naver.client_id="YOUR_CLIENT_ID"
+    //    - firebase functions:config:set naver.client_secret="YOUR_CLIENT_SECRET"
+  },
+  async (req, res) => {
+    // CORS 설정 (추가 보안)
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+
+    if (req.method !== "GET" && req.method !== "POST") {
+      res.status(405).json({ success: false, error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      const query = req.query.query || req.body.query;
+
+      if (!query || !query.trim()) {
+        res.status(400).json({ success: false, error: "검색어가 필요합니다." });
+        return;
+      }
+
+      // 네이버 검색 API 인증 정보 (환경 변수에서 가져오기)
+      const clientId = process.env.NAVER_CLIENT_ID || process.env.VITE_NAVER_MAP_CLIENT_ID || "";
+      const clientSecret = process.env.NAVER_CLIENT_SECRET || "";
+
+      if (!clientId || !clientSecret) {
+        console.error("네이버 검색 API 인증 정보가 설정되지 않았습니다.");
+        res.status(500).json({
+          success: false,
+          error: "네이버 검색 API 인증 정보가 설정되지 않았습니다. Firebase Functions 환경 변수를 확인하세요.",
+          hint: "NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 Firebase Functions 환경 변수에 설정하세요.",
+        });
+        return;
+      }
+
+      // 네이버 검색 API - 지역 검색 (Places API)
+      const searchUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query.trim())}&display=5&start=1&sort=random`;
+
+      console.log("네이버 검색 API 호출:", searchUrl);
+
+      const response = await fetch(searchUrl, {
+        method: "GET",
+        headers: {
+          "X-Naver-Client-Id": clientId,
+          "X-Naver-Client-Secret": clientSecret,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("네이버 검색 API 오류:", response.status, errorText);
+        res.status(response.status).json({
+          success: false,
+          error: `네이버 검색 API 호출 실패: ${response.status}`,
+          details: errorText,
+        });
+        return;
+      }
+
+      const data = await response.json();
+
+      // 검색 결과 반환
+      res.status(200).json({
+        success: true,
+        items: data.items || [],
+        total: data.total || 0,
+      });
+    } catch (error) {
+      console.error("장소 검색 오류:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "장소 검색 중 오류가 발생했습니다.",
+      });
+    }
+  }
+);
+

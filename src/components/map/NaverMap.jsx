@@ -259,11 +259,20 @@ export default function NaverMap({
     };
   }, [naverMaps, centerLat, centerLng, level, clickable, onClick, draggable]);
 
+  // 지도 중심 업데이트 (centerLat, centerLng 변경 시)
+  useEffect(() => {
+    if (!map || !naverMaps) return;
+    
+    const newCenter = new naverMaps.LatLng(centerLat, centerLng);
+    map.setCenter(newCenter);
+    map.setZoom(level);
+  }, [map, naverMaps, centerLat, centerLng, level]);
+
   // 마커 업데이트
   useEffect(() => {
     if (!map || !naverMaps) return;
 
-    console.log("마커 업데이트 시작, groupedMarkerName:", groupedMarkerName);
+    // console.log("마커 업데이트 시작, groupedMarkerName:", groupedMarkerName); // 디버깅 로그 제거
 
     // 기존 마커 및 InfoWindow 제거
     markerRefs.current.forEach((marker, index) => {
@@ -510,7 +519,7 @@ export default function NaverMap({
         duration: 300, // 애니메이션 시간 (밀리초)
       });
     }
-  }, [map, naverMaps, markers, groupedMarkerName, groupedMarkers, selectedMarker]);
+  }, [map, naverMaps, markers, groupedMarkerName, selectedMarker]); // groupedMarkers 제거 (사용하지 않음)
 
   // 선택된 마커 업데이트
   useEffect(() => {
