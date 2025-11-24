@@ -33,20 +33,68 @@ export default function SettlementCompletePage() {
             : [];
           
           const participants = Object.values(roomData.participants || {});
+          
+          // 각 메뉴별로 실시간으로 pricePerPerson 계산
+          const menuItemsWithPricePerPerson = menuItemsArray.map((item) => {
+            // completed: true인 참여자만 카운트 (확정한 참여자만)
+            const completedParticipants = participants.filter(p => p.completed === true);
+            const confirmedCount = completedParticipants.filter((p) => {
+              const selectedIds = p.selectedMenuIds;
+              // null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
+              if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                return false;
+              }
+              // 타입 일치 확인 (숫자로 변환하여 비교)
+              const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+              return selectedIds.some(id => {
+                const selectedId = typeof id === 'number' ? id : Number(id);
+                return selectedId === menuId;
+              });
+            }).length;
+            
+            // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+            const calculatedPricePerPerson = confirmedCount > 0
+              ? Math.floor((item.price || 0) / confirmedCount)
+              : item.price || 0;
+            
+            return {
+              ...item,
+              pricePerPerson: item.pricePerPerson ?? calculatedPricePerPerson,
+            };
+          });
+          
           setSettlementData({
             totalAmount: menuItemsArray.reduce((sum, item) => sum + item.price, 0),
             participantCount: participants.length,
             date: new Date(roomData.createdAt).toLocaleDateString("ko-KR"),
-            participants: participants.map((p) => ({
-              name: p.nickname,
-              menuItems: menuItemsArray
-                .filter((item) => p.selectedMenuIds?.includes(item.id))
-                .map((item) => item.name)
-                .join(" + "),
-              amount: menuItemsArray
-                .filter((item) => p.selectedMenuIds?.includes(item.id))
-                .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0),
-            })),
+            participants: participants.map((p) => {
+              // 참여자가 선택한 메뉴들의 pricePerPerson 합산
+              const selectedMenuIds = p.selectedMenuIds || [];
+              const amount = menuItemsWithPricePerPerson
+                .filter((item) => {
+                  const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+                  return selectedMenuIds.some(id => {
+                    const selectedId = typeof id === 'number' ? id : Number(id);
+                    return selectedId === itemId;
+                  });
+                })
+                .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+              
+              return {
+                name: p.nickname,
+                menuItems: menuItemsWithPricePerPerson
+                  .filter((item) => {
+                    const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+                    return selectedMenuIds.some(id => {
+                      const selectedId = typeof id === 'number' ? id : Number(id);
+                      return selectedId === itemId;
+                    });
+                  })
+                  .map((item) => item.name)
+                  .join(" + "),
+                amount: amount,
+              };
+            }),
           });
         }
         setLoading(false);

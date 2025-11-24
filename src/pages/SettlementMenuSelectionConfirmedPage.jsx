@@ -204,29 +204,23 @@ export default function SettlementMenuSelectionConfirmedPage() {
                   </div>
                 </div>
 
-                {/* Participant Chips */}
-                <div className="flex gap-1.5 h-6 items-center shrink-0 w-full max-w-[318px]">
-                  {item.participants.map((participant, index) => (
-                    <div
-                      key={index}
-                      className={`flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 ${
-                        participant.isSelected
-                          ? "bg-[#e5f2ff]"
-                          : "bg-[#ffe5e5]"
-                      }`}
-                    >
-                      <p
-                        className={`font-medium text-[11px] ${
-                          participant.isSelected
-                            ? "text-[#3366cc]"
-                            : "text-[#cc3333]"
-                        }`}
-                      >
-                        {participant.name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {/* Participant Chips - 선택한 참여자만 표시 */}
+                {item.participants && item.participants.length > 0 && (
+                  <div className="flex gap-1.5 h-6 items-center shrink-0 w-full max-w-[318px] flex-wrap">
+                    {item.participants
+                      .filter(participant => participant.isSelected) // 선택한 참여자만 필터링
+                      .map((participant, index) => (
+                        <div
+                          key={index}
+                          className="flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 bg-[#e5f2ff]"
+                        >
+                          <p className="font-medium text-[11px] text-[#3366cc] whitespace-nowrap">
+                            {participant.name}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}

@@ -12,6 +12,8 @@ export default function SettlementMenuSelectionPage() {
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [currentParticipants, setCurrentParticipants] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showAllSelections, setShowAllSelections] = useState(false);
+  const [roomData, setRoomData] = useState(null);
   
   // Step5에서 온 경우 방장으로 간주
   const isHost = location.state?.isHost || false;
@@ -100,6 +102,7 @@ export default function SettlementMenuSelectionPage() {
         setMenuItems(safeItems);
         setTotalParticipants(data.totalParticipants || 0);
         setCurrentParticipants(data.currentParticipants || 0);
+        setRoomData(data); // roomData를 state에 저장하여 실시간 계산에 사용
         
         // 방장인 경우: Firebase에서 방장 정보를 가져와서 selectedMenuIds 초기화
         if (isHost && !userNickname) {
@@ -287,6 +290,25 @@ export default function SettlementMenuSelectionPage() {
         <div className="flex flex-col gap-2.5 h-[494px] items-start overflow-y-auto px-0 py-2.5 w-full max-w-[350px]">
           {menuItems.map((item) => {
             const isSelected = selectedMenuIds.includes(item.id);
+            
+            // 실시간으로 참여자 수와 가격 계산 (roomData 기반)
+            const allParticipants = Object.values(roomData?.participants || {});
+            const completedParticipants = allParticipants.filter(p => p.completed === true);
+            const confirmedCount = completedParticipants.filter((p) => {
+              const selectedIds = p.selectedMenuIds;
+              if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                return false;
+              }
+              const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+              return selectedIds.some(id => {
+                const selectedId = typeof id === 'number' ? id : Number(id);
+                return selectedId === menuId;
+              });
+            }).length;
+            const realTimePricePerPerson = confirmedCount > 0 
+              ? Math.floor((item.price || 0) / confirmedCount)
+              : undefined;
+            
             return (
               <div
                 key={item.id}
@@ -302,8 +324,8 @@ export default function SettlementMenuSelectionPage() {
                       </p>
                       <p className="font-normal text-xs text-gray-500 truncate">
                         {(item.price || 0).toLocaleString()}원
-                        {item.participantCount > 0 && (
-                          <> • {item.participantCount}명 참여 • {(item.pricePerPerson || 0).toLocaleString()}원/인</>
+                        {confirmedCount > 0 && (
+                          <> • {confirmedCount}명 참여 • {(realTimePricePerPerson || 0).toLocaleString()}원/인</>
                         )}
                       </p>
                     </div>
@@ -372,7 +394,96 @@ export default function SettlementMenuSelectionPage() {
         </div>
 
         {/* Bottom Section */}
-        <div className="bg-white flex flex-col gap-4 items-start overflow-clip p-5 sticky bottom-0 rounded-[10px] shrink-0 w-full max-w-[350px] z-10">
+        <div className={`bg-white flex flex-col gap-4 items-start overflow-clip p-5 sticky bottom-0 rounded-[10px] shrink-0 w-full max-w-[350px] z-10 ${
+          showAllSelections ? "h-[200px]" : "h-[136px]"
+        }`}>
+          <button
+            onClick={() => setShowAllSelections(!showAllSelections)}
+            className="bg-[#f2f2f2] flex gap-2 h-8 items-center justify-center px-4 py-2 rounded-[10px] text-[#666666] w-full max-w-[310px] hover:bg-[#e6e6e6] transition-colors"
+          >
+            <span className="font-medium text-sm">내 선택 전체보기</span>
+            <span className={`font-normal text-xs transition-transform ${showAllSelections ? "rotate-180" : ""}`}>
+              ▼
+            </span>
+          </button>
+
+          {/* Expanded Details */}
+          {showAllSelections && (
+            <div className="flex flex-col gap-2 h-[120px] items-start px-0 py-2 shrink-0 w-full max-w-[310px]">
+              {/* Divider Line */}
+              <div className="bg-[#e6e6e6] h-px shrink-0 w-full" />
+
+              {/* Selected Items */}
+              <div className="flex flex-col gap-2 h-[60px] items-start px-0 py-2 shrink-0 w-full overflow-y-auto">
+                {menuItems
+                  .filter(item => selectedMenuIds.includes(item.id))
+                  .map((item) => {
+                    // 실시간으로 pricePerPerson 계산
+                    const allParticipants = Object.values(roomData?.participants || {});
+                    const completedParticipants = allParticipants.filter(p => p.completed === true);
+                    const confirmedCount = completedParticipants.filter((p) => {
+                      const selectedIds = p.selectedMenuIds;
+                      if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                        return false;
+                      }
+                      const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+                      return selectedIds.some(id => {
+                        const selectedId = typeof id === 'number' ? id : Number(id);
+                        return selectedId === menuId;
+                      });
+                    }).length;
+                    const pricePerPerson = confirmedCount > 0 
+                      ? Math.floor((item.price || 0) / confirmedCount)
+                      : item.price || 0;
+                    
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex h-6 items-center justify-between text-sm w-full"
+                      >
+                        <p className="font-medium text-[#4d4d4d]">{item.name}</p>
+                        <p className="font-semibold text-[#1a1a1a]">
+                          {pricePerPerson.toLocaleString()}원
+                        </p>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Bottom Divider */}
+              <div className="bg-[#e6e6e6] h-px shrink-0 w-full" />
+
+              {/* Total Section */}
+              <div className="flex font-bold h-8 items-center justify-between px-0 py-2 text-[#1a1a1a] w-full">
+                <p className="text-base">총 합계</p>
+                <p className="text-lg">
+                  {menuItems
+                    .filter(item => selectedMenuIds.includes(item.id))
+                    .reduce((sum, item) => {
+                      // 실시간으로 pricePerPerson 계산
+                      const allParticipants = Object.values(roomData?.participants || {});
+                      const completedParticipants = allParticipants.filter(p => p.completed === true);
+                      const confirmedCount = completedParticipants.filter((p) => {
+                        const selectedIds = p.selectedMenuIds;
+                        if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
+                          return false;
+                        }
+                        const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+                        return selectedIds.some(id => {
+                          const selectedId = typeof id === 'number' ? id : Number(id);
+                          return selectedId === menuId;
+                        });
+                      }).length;
+                      const pricePerPerson = confirmedCount > 0 
+                        ? Math.floor((item.price || 0) / confirmedCount)
+                        : item.price || 0;
+                      return sum + pricePerPerson;
+                    }, 0).toLocaleString()}원
+                </p>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleConfirm}
             className="bg-[#3366cc] flex gap-2 h-12 items-center justify-center px-4 py-3 rounded-xl shrink-0 w-full max-w-[310px] hover:bg-[#2555e6] transition-colors"
