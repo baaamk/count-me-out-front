@@ -279,13 +279,14 @@ export default function SettlementRoomHostPage() {
           }).length;
           
           // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+          // ⚠️ 정산 확정 시점에는 항상 실시간 계산값 사용 (Firebase 저장값 무시)
           const calculatedPricePerPerson = confirmedCount > 0
             ? Math.floor((item.price || 0) / confirmedCount)
-            : item.price || 0;
+            : 0;
           
           return {
             ...item,
-            pricePerPerson: item.pricePerPerson ?? calculatedPricePerPerson,
+            pricePerPerson: calculatedPricePerPerson, // 항상 실시간 계산값 사용
           };
         });
 
@@ -298,15 +299,21 @@ export default function SettlementRoomHostPage() {
             const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
             // 참여자가 선택한 메뉴들의 pricePerPerson 합산 (실시간 계산값 사용)
             const selectedMenuIds = participant.selectedMenuIds || [];
-            const participantAmount = menuItemsWithPricePerPerson
-              .filter((item) => {
-                const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
-                return selectedMenuIds.some(id => {
-                  const selectedId = typeof id === 'number' ? id : Number(id);
-                  return selectedId === itemId;
-                });
-              })
-              .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+            const selectedItems = menuItemsWithPricePerPerson.filter((item) => {
+              const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
+              return selectedMenuIds.some(id => {
+                const selectedId = typeof id === 'number' ? id : Number(id);
+                return selectedId === itemId;
+              });
+            });
+            
+            const participantAmount = selectedItems.reduce((sum, item) => {
+              const pricePerPerson = item.pricePerPerson || 0;
+              console.log(`[${participant.nickname}] 메뉴 "${item.name}": 원가 ${item.price}원, pricePerPerson ${pricePerPerson}원`);
+              return sum + pricePerPerson;
+            }, 0);
+            
+            console.log(`[${participant.nickname}] 선택한 메뉴 수: ${selectedItems.length}, 개인 금액: ${participantAmount}원, 총 금액: ${totalAmount}원`);
 
             const settlementData = {
               roomId: roomId,
@@ -314,8 +321,8 @@ export default function SettlementRoomHostPage() {
               role: participant.isHost ? "host" : "participant",
               nickname: participant.nickname,
               joinedAt: participant.joinedAt,
-              amount: participantAmount,
-              totalAmount: totalAmount,
+              amount: participantAmount, // 개인 금액 (본인이 낸 금액)
+              totalAmount: totalAmount, // 전체 금액 (참고용)
               status: "completed",
               createdAt: roomData.createdAt ? Timestamp.fromMillis(roomData.createdAt) : Timestamp.now(),
               completedAt: Timestamp.fromMillis(completedAtTimestamp), // Firestore Timestamp로 변환
