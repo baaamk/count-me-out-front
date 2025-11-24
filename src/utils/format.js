@@ -9,7 +9,9 @@
  */
 export const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return "0원";
-  return `${amount.toLocaleString()}원`;
+  // 숫자로 변환
+  const numAmount = typeof amount === 'number' ? amount : Number(amount) || 0;
+  return `${numAmount.toLocaleString()}원`;
 };
 
 /**

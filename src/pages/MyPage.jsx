@@ -37,9 +37,14 @@ export default function MyPage() {
 
         if (userSnap.exists()) {
           const userData = userSnap.data();
+          
+          // 이메일이 내부 이메일인 경우 표시하지 않음
+          const email = userData.email || user.email || "";
+          const displayEmail = email.includes("@countmeout.internal") ? "" : email;
+          
           setUserData({
             nickname: userData.nickname || userData.displayName || "",
-            email: userData.email || user.email || "",
+            email: displayEmail,
             avatar: userData.photoURL || "👤",
           });
 
@@ -51,9 +56,12 @@ export default function MyPage() {
           });
         } else {
           // 사용자 문서가 없으면 기본값 설정
+          const email = user.email || "";
+          const displayEmail = email.includes("@countmeout.internal") ? "" : email;
+          
           setUserData({
             nickname: user.displayName || "",
-            email: user.email || "",
+            email: displayEmail,
             avatar: user.photoURL || "👤",
           });
           setAccountData({
@@ -82,8 +90,22 @@ export default function MyPage() {
           
           querySnapshot.forEach((doc) => {
             const data = doc.data();
-            const completedDate = new Date(data.completedAt);
-            const amount = data.amount || 0;
+            // completedAt이 없으면 createdAt 사용, 둘 다 없으면 스킵
+            const completedDate = data.completedAt 
+              ? new Date(data.completedAt) 
+              : data.createdAt 
+              ? new Date(data.createdAt)
+              : null;
+            
+            if (!completedDate || isNaN(completedDate.getTime())) {
+              return; // 유효하지 않은 날짜는 스킵
+            }
+            
+            // amount가 숫자인지 확인하고 변환
+            let amount = data.amount;
+            if (typeof amount !== 'number') {
+              amount = Number(amount) || 0;
+            }
             
             if (completedDate >= thisMonthStart) {
               thisMonthTotal += amount;
@@ -145,22 +167,28 @@ export default function MyPage() {
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
-        // 기존 문서 업데이트
+        // 기존 문서 업데이트 (닉네임은 기존 값 유지)
+        const existingData = userSnap.data();
         await updateDoc(userRef, {
           bank: accountData.bank,
           accountNumber: accountData.accountNumber,
           kakaoPayCode: accountData.kakaoPayCode || null,
           accountUpdatedAt: Date.now(),
+          // 닉네임이 없으면 기존 닉네임 유지, 있으면 업데이트하지 않음
         });
       } else {
         // 새 문서 생성
+        const email = user.email || "";
+        const displayEmail = email.includes("@countmeout.internal") ? "" : email;
+        
         await setDoc(userRef, {
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
+          email: user.email || "",
+          displayName: user.displayName || null,
+          photoURL: user.photoURL || null,
           createdAt: Date.now(),
           lastLoginAt: Date.now(),
-          provider: "email",
+          provider: "nickname",
+          nickname: user.displayName || null,
           bank: accountData.bank,
           accountNumber: accountData.accountNumber,
           kakaoPayCode: accountData.kakaoPayCode || null,
@@ -329,10 +357,10 @@ export default function MyPage() {
               <p className="font-bold text-sm text-[#1a1a1a]">{displayAccountData.accountNumber || "미설정"}</p>
             </div>
 
-            {/* Link Row */}
-            <div className="bg-neutral-50 flex flex-col gap-1 h-12 px-4 py-2 rounded-[14px] w-full max-w-[270px]">
-              <p className="font-semibold text-xs text-[#333333]">카카오페이 송금 링크</p>
-              <p className="font-semibold text-xs text-[#3366cc]">{displayAccountData.kakaoPayLink || ""}</p>
+            {/* KakaoPay Code Row */}
+            <div className="bg-neutral-50 flex items-center h-12 px-4 rounded-[14px] w-full max-w-[270px]">
+              <p className="font-semibold text-xs text-[#333333] w-[80px]">카카오페이</p>
+              <p className="font-bold text-sm text-[#1a1a1a]">{displayAccountData.kakaoPayCode || "미설정"}</p>
             </div>
           </div>
         </div>
@@ -350,7 +378,11 @@ export default function MyPage() {
               이번 달 총 {formatCurrency(displaySettlementHistory.thisMonth)}을 정산했어요!
             </p>
             <p className="font-semibold text-xs text-[#333333] -mt-1">
-              지난 달 대비 +{formatCurrency(displaySettlementHistory.difference)}
+              {displaySettlementHistory.difference >= 0 
+                ? `지난 달보다 ${formatCurrency(Math.abs(displaySettlementHistory.difference))} 더 썼어요`
+                : displaySettlementHistory.difference < 0
+                ? `지난 달보다 ${formatCurrency(Math.abs(displaySettlementHistory.difference))} 덜 썼어요`
+                : '지난 달과 동일해요'}
             </p>
           </div>
 

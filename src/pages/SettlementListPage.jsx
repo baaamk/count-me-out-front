@@ -45,15 +45,24 @@ export default function SettlementListPage() {
           const year = completedDate.getFullYear();
           const month = completedDate.getMonth() + 1;
           
+          // 타입에 따른 아이콘과 제목 설정
+          const typeConfig = {
+            receipt: { icon: "🧾", title: "영수증 정산" },
+            taxi: { icon: "🚕", title: "택시 정산" },
+          };
+          const config = typeConfig[data.type] || { icon: "💰", title: "정산" };
+          
           settlementList.push({
             id: doc.id,
             uuid: data.roomId,
             type: data.type,
-            amount: data.amount,
-            totalAmount: data.totalAmount,
-            date: completedDate,
+            amount: data.amount || 0,
+            totalAmount: data.totalAmount || 0,
+            date: formatDateShort(completedDate),
             yearMonth: `${year}년 ${month}월`,
             nickname: data.nickname,
+            icon: config.icon,
+            title: config.title,
           });
         });
         

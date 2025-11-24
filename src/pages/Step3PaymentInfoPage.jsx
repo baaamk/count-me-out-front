@@ -6,7 +6,7 @@ import ButtonContainer from "../components/layout/ButtonContainer";
 import KakaoPayHelpModal from "../components/modals/KakaoPayHelpModal";
 import { auth, firestore, database } from "../config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { ref, set } from "firebase/database";
 
 export default function Step3PaymentInfoPage() {
@@ -199,6 +199,45 @@ export default function Step3PaymentInfoPage() {
       await set(roomRef, roomData);
       console.log("정산 방 생성 완료:", roomId);
       
+      // 로그인한 사용자인 경우 Firestore에 송금 정보 저장
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          const userRef = doc(firestore, "users", currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            // 기존 문서 업데이트 (닉네임과 계좌 정보)
+            await updateDoc(userRef, {
+              nickname: nickname.trim(),
+              bank: bank,
+              accountNumber: accountNumber,
+              kakaoPayCode: (kakaoPayCode && kakaoPayCode.trim()) ? kakaoPayCode.trim() : null,
+              accountUpdatedAt: Date.now(),
+            });
+          } else {
+            // 새 문서 생성
+            await setDoc(userRef, {
+              email: currentUser.email || "",
+              displayName: null,
+              photoURL: null,
+              createdAt: Date.now(),
+              lastLoginAt: Date.now(),
+              provider: "nickname",
+              nickname: nickname.trim(),
+              bank: bank,
+              accountNumber: accountNumber,
+              kakaoPayCode: (kakaoPayCode && kakaoPayCode.trim()) ? kakaoPayCode.trim() : null,
+              accountUpdatedAt: Date.now(),
+            });
+          }
+          console.log("사용자 송금 정보가 Firestore에 저장되었습니다.");
+        } catch (firestoreError) {
+          console.error("Firestore 저장 실패:", firestoreError);
+          // Firestore 저장 실패해도 정산 방 생성은 계속 진행
+        }
+      }
+      
       // 다음 단계로 이동 (roomId 전달)
       console.log("Step4로 이동 시작:", { roomId, menuItemsCount: menuItems.length });
       try {
@@ -244,7 +283,7 @@ export default function Step3PaymentInfoPage() {
         </div>
 
         {/* Info Text */}
-        <p className="font-normal text-xs text-[#6b7380] w-full max-w-[342px] text-center">
+        <p className="font-normal text-xs text-[#6b7380] w-full max-w-[342px] text-center whitespace-nowrap">
           카카오페이 송금코드는 선택 항목입니다. 닉네임, 은행, 계좌번호는 필수예요.
         </p>
 

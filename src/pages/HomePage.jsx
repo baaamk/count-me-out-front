@@ -10,6 +10,9 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [settlementHistory, setSettlementHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 개발 환경인지 확인 (로컬에서는 true, 프로덕션에서는 false)
+  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
 
   useEffect(() => {
     // 인증 상태 확인
@@ -83,7 +86,7 @@ export default function HomePage() {
         </div>
 
         {/* Action Cards Row */}
-        <div className="flex gap-3 p-4 bg-white rounded-3xl w-full">
+        <div className={`flex gap-3 p-4 bg-white rounded-3xl w-full ${isDevelopment ? '' : 'justify-center'}`}>
           {/* Receipt Card */}
           <div
             onClick={() => navigate("/settlement/receipt/step1")}
@@ -94,15 +97,23 @@ export default function HomePage() {
             <p className="font-normal text-xs text-gray-500">메뉴 선택 후 자동 계산</p>
           </div>
 
-          {/* Taxi Card */}
-          <div
-            onClick={() => navigate("/taxi/settlement/start")}
-            className="flex-1 flex flex-col gap-1 items-start p-4 bg-[#d9ebff] rounded-[20px] cursor-pointer"
-          >
-            <p className="text-[32px]">🚕</p>
-            <p className="font-semibold text-base text-[#1a1a1a]">택시 정산</p>
-            <p className="font-normal text-xs text-gray-500">하차 위치로 N빵</p>
-          </div>
+          {/* Taxi Card - 개발 환경에서만 활성화 */}
+          {isDevelopment ? (
+            <div
+              onClick={() => navigate("/taxi/settlement/start")}
+              className="flex-1 flex flex-col gap-1 items-start p-4 bg-[#d9ebff] rounded-[20px] cursor-pointer"
+            >
+              <p className="text-[32px]">🚕</p>
+              <p className="font-semibold text-base text-[#1a1a1a]">택시 정산</p>
+              <p className="font-normal text-xs text-gray-500">하차 위치로 N빵</p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col gap-1 items-start p-4 bg-[#f2f2f2] rounded-[20px] cursor-not-allowed opacity-60">
+              <p className="text-[32px]">🚕</p>
+              <p className="font-semibold text-base text-[#666666]">택시 정산</p>
+              <p className="font-normal text-xs text-[#999999]">업데이트 중</p>
+            </div>
+          )}
         </div>
 
         {/* History Section */}
