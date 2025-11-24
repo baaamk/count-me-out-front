@@ -18,8 +18,12 @@ export default function Step5SetupCompletePage() {
   }, []);
 
   const handleEnterRoom = () => {
-    // 방장이 메뉴 선택 페이지로 이동 (roomId 전달)
-    navigate("/settlement/room/menu-selection", { 
+    // 방장이 메뉴 선택 페이지로 이동 (roomId를 URL에 포함)
+    if (!roomId) {
+      alert("방 정보를 찾을 수 없습니다.");
+      return;
+    }
+    navigate(`/settlement/room/${roomId}/menu-selection`, { 
       state: { 
         isHost: true,
         roomId 

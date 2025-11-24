@@ -136,15 +136,23 @@ export default function SettlementRoomHostPage() {
   };
 
   const handleEdit = () => {
-    // 메뉴 편집 페이지로 이동 (현재 메뉴 데이터 전달)
-    navigate("/settlement/room/menu-edit", {
+    // 메뉴 편집 페이지로 이동 (roomId를 URL에 포함)
+    if (!roomId) {
+      alert("방 정보를 찾을 수 없습니다.");
+      return;
+    }
+    navigate(`/settlement/room/${roomId}/menu-edit`, {
       state: { menuItems: menuItemsState, roomId },
     });
   };
 
   const handleReselect = () => {
-    // 메뉴 선택 페이지로 돌아가기 (방장 상태 전달)
-    navigate("/settlement/room/menu-selection", { 
+    // 메뉴 선택 페이지로 돌아가기 (roomId를 URL에 포함)
+    if (!roomId) {
+      alert("방 정보를 찾을 수 없습니다.");
+      return;
+    }
+    navigate(`/settlement/room/${roomId}/menu-selection`, { 
       state: { isHost: true, roomId } 
     });
   };
