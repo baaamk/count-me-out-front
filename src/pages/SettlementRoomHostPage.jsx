@@ -1,0 +1,400 @@
+import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import MobileLayout from "../layouts/MobileLayout";
+import { ref, onValue, update, get } from "firebase/database";
+import { database, auth, firestore } from "../config/firebase";
+import { doc, setDoc } from "firebase/firestore";
+
+export default function SettlementRoomHostPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [showAllSelections, setShowAllSelections] = useState(false);
+  const [menuItemsState, setMenuItemsState] = useState([]);
+  const [totalParticipants, setTotalParticipants] = useState(0);
+  const [currentParticipants, setCurrentParticipants] = useState(0);
+  const [loading, setLoading] = useState(true);
+  
+  const roomId = location.state?.roomId;
+
+  // Firebase에서 정산 방 데이터 실시간 구독
+  useEffect(() => {
+    if (!roomId || !database) {
+      setLoading(false);
+      return;
+    }
+
+    const roomRef = ref(database, `settlements/${roomId}`);
+    
+    // 실시간 구독
+    const unsubscribe = onValue(roomRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // 메뉴 항목과 참여자 정보 결합
+        const menuItemsWithParticipants = (data.menuItems || []).map((menuItem, index) => {
+          const participants = Object.values(data.participants || {}).map((participant) => {
+            const isSelected = participant.selectedMenuIds?.includes(menuItem.id) || false;
+            return {
+              name: participant.nickname,
+              isSelected: isSelected,
+            };
+          });
+
+          return {
+            id: menuItem.id,
+            name: menuItem.name,
+            price: menuItem.price,
+            participantCount: menuItem.participantCount || participants.filter(p => p.isSelected).length,
+            pricePerPerson: menuItem.pricePerPerson || (menuItem.participantCount > 0 ? Math.floor(menuItem.price / menuItem.participantCount) : menuItem.price),
+            isSelected: false, // 방장은 선택하지 않음
+            participants: participants,
+          };
+        });
+
+        setMenuItemsState(menuItemsWithParticipants);
+        setTotalParticipants(data.totalParticipants || 0);
+        setCurrentParticipants(data.currentParticipants || 0);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [roomId]);
+
+  const remainingParticipants = totalParticipants - currentParticipants;
+  const allParticipantsCompleted = remainingParticipants === 0; // 모든 참여자 완료 여부
+
+  // 초기 메뉴 데이터 (로딩 중일 때 사용)
+  const initialMenuItems = [
+    {
+      id: 1,
+      name: "삼겹살",
+      price: 30000,
+      participantCount: 3,
+      pricePerPerson: 10000,
+      isSelected: true,
+      participants: [
+        { name: "철수", isSelected: true },
+        { name: "영희", isSelected: true },
+        { name: "민수", isSelected: false },
+      ],
+    },
+    {
+      id: 2,
+      name: "음료수",
+      price: 2000,
+      participantCount: allParticipantsCompleted ? 2 : 1,
+      pricePerPerson: allParticipantsCompleted ? 1000 : 2000,
+      isSelected: false,
+      participants: allParticipantsCompleted
+        ? [
+            { name: "철수", isSelected: true },
+            { name: "준수", isSelected: true },
+          ]
+        : [{ name: "철수", isSelected: true }],
+    },
+    {
+      id: 3,
+      name: "맥주",
+      price: 6000,
+      participantCount: 3,
+      pricePerPerson: 2000,
+      isSelected: true,
+      participants: [
+        { name: "철수", isSelected: true },
+        { name: "영희", isSelected: true },
+        { name: "민수", isSelected: false },
+      ],
+    },
+  ];
+
+  // location.state에서 메뉴 데이터 업데이트 (편집 페이지에서 돌아올 때)
+  useEffect(() => {
+    if (location.state?.menuItems) {
+      setMenuItemsState(location.state.menuItems);
+    }
+  }, [location.state]);
+
+  const handleMenuToggle = async (itemId) => {
+    // 방장의 선택은 Firebase에 저장하지 않음 (방장은 모든 메뉴를 볼 수만 있음)
+    setMenuItemsState((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, isSelected: !item.isSelected } : item
+      )
+    );
+  };
+
+  const handleEdit = () => {
+    // 메뉴 편집 페이지로 이동 (현재 메뉴 데이터 전달)
+    navigate("/settlement/room/menu-edit", {
+      state: { menuItems: menuItemsState, roomId },
+    });
+  };
+
+  const handleReselect = () => {
+    // 메뉴 선택 페이지로 돌아가기 (방장 상태 전달)
+    navigate("/settlement/room/menu-selection", { 
+      state: { isHost: true, roomId } 
+    });
+  };
+
+  const handleViewAllSelections = () => {
+    setShowAllSelections(!showAllSelections);
+  };
+
+  const handleConfirmSettlement = async () => {
+    if (!allParticipantsCompleted) {
+      alert("모든 참여자가 완료할 때까지 기다려주세요.");
+      return;
+    }
+    
+    if (!roomId || !database) {
+      alert("방 정보를 불러올 수 없습니다.");
+      return;
+    }
+
+    try {
+      // 정산 상태를 completed로 변경
+      await update(ref(database, `settlements/${roomId}`), {
+        status: "completed",
+        completedAt: Date.now(),
+      });
+
+      // 정산 방 데이터 가져오기
+      const roomRef = ref(database, `settlements/${roomId}`);
+      const snapshot = await get(roomRef);
+      const roomData = snapshot.val();
+
+      if (roomData) {
+        // 모든 참여자의 Firestore에 정산 내역 저장
+        const participants = Object.values(roomData.participants || {});
+        const totalAmount = (roomData.menuItems || []).reduce((sum, item) => sum + item.price, 0);
+
+        for (const participant of participants) {
+          if (participant.uid) {
+            // 로그인한 사용자만 Firestore에 저장
+            try {
+              const userSettlementRef = doc(firestore, `users/${participant.uid}/settlements/${roomId}`);
+              const participantAmount = (roomData.menuItems || [])
+                .filter((item) => participant.selectedMenuIds?.includes(item.id))
+                .reduce((sum, item) => sum + (item.pricePerPerson || 0), 0);
+
+              await setDoc(userSettlementRef, {
+                roomId: roomId,
+                type: roomData.type || "receipt",
+                role: participant.isHost ? "host" : "participant",
+                nickname: participant.nickname,
+                joinedAt: participant.joinedAt,
+                amount: participantAmount,
+                totalAmount: totalAmount,
+                status: "completed",
+                createdAt: roomData.createdAt,
+                completedAt: roomData.completedAt || Date.now(),
+              });
+            } catch (firestoreError) {
+              console.error(`사용자 ${participant.uid} 정산 내역 저장 실패:`, firestoreError);
+              // Firestore 저장 실패해도 정산 확정은 계속 진행
+            }
+          }
+        }
+      }
+      
+      navigate("/settlement/complete", { state: { roomId } });
+    } catch (error) {
+      console.error("정산 확정 실패:", error);
+      alert("정산 확정에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  // 본인이 선택한 메뉴 항목만 필터링
+  const selectedItems = menuItemsState.filter((item) => item.isSelected);
+
+  // 총 합계 계산
+  const totalAmount = selectedItems.reduce((sum, item) => sum + item.pricePerPerson, 0);
+  
+  // 방장이 메뉴 선택을 완료했는지 확인 (선택한 메뉴가 있는지)
+  const hasHostSelectedMenu = selectedItems.length > 0;
+
+  return (
+    <MobileLayout>
+      <div className="flex flex-col gap-2.5 items-center p-5 bg-neutral-50 min-h-screen w-full">
+        {/* Header Section */}
+        <div className="bg-white h-[106px] overflow-clip relative shrink-0 w-full max-w-[350px]">
+          <div className="absolute flex flex-col gap-2 h-[70px] items-start left-5 top-[18px] w-[140px]">
+            <h1 className="font-bold text-xl text-[#1a1a1a] whitespace-nowrap">🍽️ 메뉴 선택하기</h1>
+            <div className="font-medium h-9 text-sm text-gray-500 w-[205px]">
+              {allParticipantsCompleted ? (
+                <>
+                  <p className="mb-0">모두 참여 완료!</p>
+                  <p>정산 확정을 해주세요!</p>
+                </>
+              ) : (
+                <>
+                  <p className="leading-normal mb-0">
+                    {totalParticipants}명 중 {currentParticipants}명이 참여 중
+                  </p>
+                  <p className="font-semibold leading-normal">
+                    미완료 <span className="underline">{remainingParticipants}</span>명
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleEdit}
+            className="absolute bg-[#f2f2f2] flex gap-1.5 h-10 items-center leading-normal left-[260px] px-4 py-3 rounded-lg text-[#666666] top-[53px] hover:bg-[#e6e6e6] transition-colors"
+          >
+            <span className="font-medium text-base">✏️</span>
+            <span className="font-medium text-sm">편집</span>
+          </button>
+          <button
+            onClick={handleReselect}
+            className="absolute bg-[#f2f2f2] flex gap-1.5 h-10 items-center left-[180px] px-4 py-3 rounded-lg top-[53px] hover:bg-[#e6e6e6] transition-colors"
+          >
+            <span className="font-medium text-sm text-[#666666]">재선택</span>
+          </button>
+        </div>
+
+        {/* Scrollable Menu Area */}
+        <div className="flex flex-col gap-2.5 h-[494px] items-start overflow-y-auto px-0 py-2.5 w-full max-w-[350px]">
+          {menuItemsState.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => handleMenuToggle(item.id)}
+              className="bg-white border border-snow h-20 relative rounded-[10px] shrink-0 w-full cursor-pointer hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex flex-col h-20 items-start overflow-hidden pb-4 pt-0 px-4 rounded-[inherit] w-full">
+                {/* Top Row */}
+                <div className="flex h-[50px] items-center justify-between shrink-0 w-full gap-2">
+                  <div className="flex flex-col gap-1 h-[38px] items-start shrink-0 flex-1 min-w-0">
+                    <p className="font-semibold text-base text-[#1a1a1a] truncate">{item.name}</p>
+                    <p className="font-normal text-xs text-gray-500 truncate">
+                      {item.price.toLocaleString()}원 • {item.participantCount}명 참여 •{" "}
+                      {item.pricePerPerson.toLocaleString()}원/인
+                    </p>
+                  </div>
+                  {/* Checkbox */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMenuToggle(item.id);
+                    }}
+                    className={`flex items-center justify-center p-1 rounded-[5px] shrink-0 size-6 ${
+                      item.isSelected
+                        ? "bg-[#3366cc]"
+                        : "bg-white border border-[#e6e6e6]"
+                    }`}
+                  >
+                    {item.isSelected && (
+                      <p className="font-semibold text-sm text-white">✓</p>
+                    )}
+                  </button>
+                </div>
+
+                {/* Participant Chips */}
+                <div className="flex gap-1.5 h-6 items-center shrink-0 w-full flex-wrap">
+                  {item.participants.map((participant, index) => (
+                    <div
+                      key={index}
+                      className={`flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 ${
+                        participant.isSelected
+                          ? "bg-[#e5f2ff]"
+                          : "bg-[#ffe5e5]"
+                      }`}
+                    >
+                      <p
+                        className={`font-medium text-[11px] whitespace-nowrap ${
+                          participant.isSelected
+                            ? "text-[#3366cc]"
+                            : "text-[#cc3333]"
+                        }`}
+                      >
+                        {participant.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom Section */}
+        <div
+          className={`bg-white flex flex-col gap-4 items-start overflow-clip p-5 sticky bottom-0 rounded-[10px] shrink-0 w-full max-w-[350px] z-10 ${
+            showAllSelections && hasHostSelectedMenu ? "h-[263px]" : hasHostSelectedMenu ? "h-[136px]" : "h-[72px]"
+          }`}
+        >
+          {hasHostSelectedMenu && (
+            <>
+              <button
+                onClick={handleViewAllSelections}
+                className="bg-[#f2f2f2] flex gap-2 h-8 items-center justify-center px-4 py-2 rounded-[10px] text-[#666666] w-full max-w-[310px] hover:bg-[#e6e6e6] transition-colors"
+              >
+                <span className="font-medium text-sm">내 선택 전체보기</span>
+                <span
+                  className={`font-normal text-xs transition-transform ${
+                    showAllSelections ? "rotate-180" : ""
+                  }`}
+                >
+                  ▼
+                </span>
+              </button>
+
+              {/* Expanded Details */}
+              {showAllSelections && (
+            <div className="flex flex-col gap-2 h-[120px] items-start px-0 py-2 shrink-0 w-full max-w-[310px]">
+              {/* Divider Line */}
+              <div className="bg-[#e6e6e6] h-px shrink-0 w-full" />
+
+              {/* Selected Items */}
+              <div className="flex flex-col gap-2 h-[60px] items-start px-0 py-2 shrink-0 w-full">
+                {selectedItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex h-6 items-center justify-between text-sm w-full"
+                  >
+                    <p className="font-medium text-[#4d4d4d]">{item.name}</p>
+                    <p className="font-semibold text-[#1a1a1a]">
+                      {item.pricePerPerson.toLocaleString()}원
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bottom Divider */}
+              <div className="bg-[#e6e6e6] h-px shrink-0 w-full" />
+
+              {/* Total Section */}
+              <div className="flex font-bold h-8 items-center justify-between px-0 py-2 text-[#1a1a1a] w-full">
+                <p className="text-base">총 합계</p>
+                <p className="text-lg">{totalAmount.toLocaleString()}원</p>
+              </div>
+            </div>
+          )}
+            </>
+          )}
+
+          {/* Settlement Confirm Button */}
+          <button
+            onClick={handleConfirmSettlement}
+            disabled={!allParticipantsCompleted}
+            className={`flex gap-2 h-12 items-center justify-center px-4 py-3 rounded-xl shrink-0 w-full max-w-[310px] transition-colors ${
+              allParticipantsCompleted
+                ? "bg-[#3366cc] hover:bg-[#2555e6]"
+                : "bg-[#e6e6e6] cursor-not-allowed"
+            }`}
+          >
+            <span
+              className={`font-semibold text-base ${
+                allParticipantsCompleted ? "text-white" : "text-[#999999]"
+              }`}
+            >
+              정산 확정하기
+            </span>
+          </button>
+        </div>
+      </div>
+    </MobileLayout>
+  );
+}
+

@@ -1,0 +1,239 @@
+import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import MobileLayout from "../layouts/MobileLayout";
+import StepIndicator from "../components/settlement/StepIndicator";
+import ButtonContainer from "../components/layout/ButtonContainer";
+import { auth, firestore } from "../config/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import KakaoPayHelpModal from "../components/modals/KakaoPayHelpModal";
+
+export default function TaxiStep3PaymentInfoPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [nickname, setNickname] = useState("");
+  const [kakaoPayCode, setKakaoPayCode] = useState("");
+  const [bank, setBank] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [showBankDropdown, setShowBankDropdown] = useState(false);
+  const [showKakaoPayHelp, setShowKakaoPayHelp] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // 로그인한 사용자의 결제 정보 자동 채우기
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          // Firestore에서 사용자 정보 가져오기
+          const userRef = doc(firestore, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            if (userData.nickname) setNickname(userData.nickname);
+            if (userData.kakaoPayCode) setKakaoPayCode(userData.kakaoPayCode);
+            if (userData.bank) setBank(userData.bank);
+            if (userData.accountNumber) setAccountNumber(userData.accountNumber);
+          }
+        } catch (error) {
+          console.error("사용자 정보 조회 실패:", error);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const banks = [
+    "경남은행",
+    "광주은행",
+    "단위농협(지역농축협)",
+    "부산은행",
+    "새마을금고",
+    "산림조합",
+    "신한은행",
+    "신협",
+    "씨티은행",
+    "우리은행",
+    "우체국예금보험",
+    "저축은행중앙회",
+    "전북은행",
+    "제주은행",
+    "카카오뱅크",
+    "케이뱅크",
+    "토스뱅크",
+    "하나은행",
+    "홍콩상하이은행",
+    "IBK기업은행",
+    "KB국민은행",
+    "iM뱅크(대구)",
+    "한국산업은행",
+    "NH농협은행",
+    "SC제일은행",
+    "Sh수협은행",
+  ];
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowBankDropdown(false);
+      }
+    };
+
+    if (showBankDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showBankDropdown]);
+
+  const handleKakaoPayHelp = () => {
+    setShowKakaoPayHelp(true);
+  };
+
+  const handlePrevious = () => {
+    navigate("/taxi/settlement/step2");
+  };
+
+  const handleNext = () => {
+    // 필수 항목 검증 (닉네임, 은행, 계좌번호)
+    if (!nickname || !nickname.trim()) {
+      alert("닉네임을 입력해주세요.");
+      return;
+    }
+    if (!bank || !accountNumber) {
+      alert("은행과 계좌번호는 필수 항목입니다.");
+      return;
+    }
+    // 출발지/도착지 정보 전달
+    navigate("/taxi/settlement/step4", {
+      state: location.state,
+    });
+  };
+
+  return (
+    <MobileLayout>
+      <div className="flex flex-col gap-5 items-center pt-[60px] pb-10 px-6 bg-[#fafcff] min-h-screen w-full">
+        {/* Step Indicator */}
+        <StepIndicator currentStep={3} className="w-full max-w-[342px]" />
+
+        {/* Header Section */}
+        <div className="flex flex-col gap-2 items-center justify-center p-2.5 w-full max-w-[342px]">
+          <h1 className="font-bold text-2xl text-[#1a1a1a]">결제 정보 입력</h1>
+          <p className="font-normal text-base text-gray-500">
+            결제에 필요한 정보를 입력해주세요
+          </p>
+          <p className="font-normal text-xs text-[#999999]">
+            로그인하면 자동으로 채워집니다
+          </p>
+        </div>
+
+        {/* Info Text */}
+        <p className="font-normal text-xs text-[#6b7380] w-full max-w-[342px] text-center">
+          카카오페이 송금코드는 선택 항목입니다. 닉네임, 은행, 계좌번호는 필수예요.
+        </p>
+
+        {/* Nickname Field */}
+        <div className="bg-white border border-[#edf0f5] relative rounded-2xl w-full max-w-[342px]">
+          <div className="flex flex-col gap-2 items-start px-5 py-2.5 rounded-[inherit] w-full">
+            <label className="font-semibold text-sm text-[#1a1a1a]">닉네임 *</label>
+            <input
+              type="text"
+              placeholder="닉네임을 입력해주세요"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              className="bg-neutral-50 border border-[#e0e0e0] h-10 flex items-center px-4 py-2.5 rounded-xl w-full text-[12.5px] text-[#999999] outline-none focus:ring-2 focus:ring-[#333333] focus:bg-white focus:text-[#1a1a1a]"
+            />
+          </div>
+        </div>
+
+        {/* KakaoPay Field */}
+        <div className="bg-white border border-[#edf0f5] relative rounded-2xl w-full max-w-[342px]">
+          <div className="flex flex-col gap-2 items-start px-5 py-2.5 rounded-[inherit] w-full">
+            {/* KakaoPay Code Label with Help Button */}
+            <div className="flex items-center justify-between w-full gap-2">
+              <label className="font-semibold text-sm text-[#1a1a1a] flex-shrink-0">
+                카카오페이 송금코드
+              </label>
+              <button
+                onClick={handleKakaoPayHelp}
+                className="bg-[#d9ebff] h-[23px] flex items-center justify-center px-3 py-2 rounded-lg shrink-0 hover:bg-[#c5dfff] transition-colors whitespace-nowrap"
+              >
+                <span className="font-extrabold text-xs text-black">
+                  송금코드 가져오는 법?
+                </span>
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="송금코드를 입력해주세요"
+              value={kakaoPayCode}
+              onChange={(e) => setKakaoPayCode(e.target.value)}
+              className="bg-neutral-50 border border-[#e0e0e0] h-10 flex items-center px-4 py-2.5 rounded-xl w-full text-[12.5px] text-[#999999] outline-none focus:ring-2 focus:ring-[#333333] focus:bg-white focus:text-[#1a1a1a]"
+            />
+
+            {/* Bank Dropdown */}
+            <label className="font-semibold text-sm text-[#1a1a1a]">은행 *</label>
+            <div ref={dropdownRef} className="relative w-full">
+              <button
+                onClick={() => setShowBankDropdown(!showBankDropdown)}
+                className="bg-neutral-50 border border-[#e0e0e0] h-10 flex items-center justify-between px-4 py-2.5 rounded-xl w-full text-[12.5px] text-[#999999] outline-none focus:ring-2 focus:ring-[#333333] focus:bg-white"
+              >
+                <span className={bank ? "text-[#1a1a1a]" : ""}>
+                  {bank || "은행을 선택해주세요"}
+                </span>
+                <span className="text-sm">▼</span>
+              </button>
+              {showBankDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e0e0e0] rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+                  {banks.map((bankName) => (
+                    <button
+                      key={bankName}
+                      onClick={() => {
+                        setBank(bankName);
+                        setShowBankDropdown(false);
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm text-[#1a1a1a] hover:bg-neutral-50 first:rounded-t-xl last:rounded-b-xl"
+                    >
+                      {bankName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Account Number */}
+            <label className="font-semibold text-sm text-[#1a1a1a]">계좌번호 *</label>
+            <input
+              type="text"
+              placeholder="예: 110-123-456789"
+              value={accountNumber}
+              onChange={(e) => {
+                const value = e.target.value.replace(/[^0-9-]/g, "");
+                setAccountNumber(value);
+              }}
+              className="bg-neutral-50 border border-[#e0e0e0] h-10 flex items-center px-4 py-2.5 rounded-xl w-full text-[12.5px] text-[#999999] outline-none focus:ring-2 focus:ring-[#333333] focus:bg-white focus:text-[#1a1a1a]"
+            />
+          </div>
+        </div>
+
+        {/* Button Container */}
+        <ButtonContainer
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+          className="w-full max-w-[342px]"
+        />
+      </div>
+
+      {/* KakaoPay Help Modal */}
+      <KakaoPayHelpModal
+        isOpen={showKakaoPayHelp}
+        onClose={() => setShowKakaoPayHelp(false)}
+      />
+    </MobileLayout>
+  );
+}
+

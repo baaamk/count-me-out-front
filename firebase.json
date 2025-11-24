@@ -1,0 +1,25 @@
+{
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "predeploy": [],
+      "runtime": "nodejs20",
+      "env": {
+        "OCR_SECRET_KEY": "bnpldE9YQnhscmJOQklqa3BmcXRJR21RU3VPI",
+        "OCR_API_GATEWAY_URL": "https://gr8jtc2vdw.apigw.ntruss.com/custom/v1/480",
+        "KAKAO_REST_API_KEY": "26408c86b1b14278745469105991cbf0"
+      }
+    }
+  ]
+}
+
