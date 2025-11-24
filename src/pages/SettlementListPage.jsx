@@ -31,17 +31,38 @@ export default function SettlementListPage() {
       try {
         // Firestore에서 사용자별 정산 내역 가져오기
         const settlementsRef = collection(firestore, `users/${user.uid}/settlements`);
-        const q = query(
+        
+        // orderBy 없이 먼저 시도 (인덱스 문제 방지)
+        let q = query(
           settlementsRef,
-          where("status", "==", "completed"),
-          orderBy("completedAt", "desc")
+          where("status", "==", "completed")
         );
-        const querySnapshot = await getDocs(q);
+        
+        let querySnapshot;
+        try {
+          querySnapshot = await getDocs(q);
+        } catch (indexError) {
+          // 인덱스 오류인 경우 orderBy 없이 다시 시도
+          console.warn("인덱스 오류, orderBy 없이 조회:", indexError);
+          q = query(settlementsRef, where("status", "==", "completed"));
+          querySnapshot = await getDocs(q);
+        }
         
         const settlementList = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const completedDate = new Date(data.completedAt);
+          
+          // completedAt이 없으면 createdAt 사용
+          const completedDate = data.completedAt 
+            ? new Date(data.completedAt) 
+            : data.createdAt 
+            ? new Date(data.createdAt)
+            : new Date(); // 둘 다 없으면 현재 날짜 사용
+            
+          if (isNaN(completedDate.getTime())) {
+            return; // 유효하지 않은 날짜는 스킵
+          }
+          
           const year = completedDate.getFullYear();
           const month = completedDate.getMonth() + 1;
           
@@ -63,12 +84,20 @@ export default function SettlementListPage() {
             nickname: data.nickname,
             icon: config.icon,
             title: config.title,
+            completedAt: data.completedAt || data.createdAt || Date.now(), // 정렬용
           });
         });
+        
+        // 클라이언트 측에서 날짜순 정렬 (completedAt 기준)
+        settlementList.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
         
         setSettlements(settlementList);
       } catch (error) {
         console.error("정산 리스트 조회 실패:", error);
+        console.error("에러 상세:", {
+          code: error?.code,
+          message: error?.message,
+        });
         setSettlements([]);
       }
       

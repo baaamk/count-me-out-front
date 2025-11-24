@@ -23,17 +23,39 @@ export default function HomePage() {
         // Firestore에서 사용자별 정산 내역 가져오기 (최근 3개)
         try {
           const settlementsRef = collection(firestore, `users/${user.uid}/settlements`);
-          const q = query(
+          
+          // orderBy 없이 먼저 시도 (인덱스 문제 방지)
+          let q = query(
             settlementsRef,
-            where("status", "==", "completed"),
-            orderBy("completedAt", "desc"),
-            limit(3)
+            where("status", "==", "completed")
           );
-          const querySnapshot = await getDocs(q);
+          
+          let querySnapshot;
+          try {
+            querySnapshot = await getDocs(q);
+          } catch (indexError) {
+            // 인덱스 오류인 경우 orderBy 없이 다시 시도
+            console.warn("인덱스 오류, orderBy 없이 조회:", indexError);
+            q = query(settlementsRef, where("status", "==", "completed"));
+            querySnapshot = await getDocs(q);
+          }
           
           const history = [];
           querySnapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // completedAt이 없으면 createdAt 사용
+            const completedDate = data.completedAt 
+              ? new Date(data.completedAt) 
+              : data.createdAt 
+              ? new Date(data.createdAt)
+              : new Date(); // 둘 다 없으면 현재 날짜 사용
+              
+            if (isNaN(completedDate.getTime())) {
+              return; // 유효하지 않은 날짜는 스킵
+            }
+            
+            const dateStr = completedDate.toLocaleDateString("ko-KR");
             
             // 타입에 따른 제목 생성
             const typeConfig = {
@@ -41,11 +63,6 @@ export default function HomePage() {
               taxi: { icon: "🚕", title: "택시 정산" },
             };
             const config = typeConfig[data.type] || { icon: "💰", title: "정산" };
-            const dateStr = data.completedAt 
-              ? new Date(data.completedAt).toLocaleDateString("ko-KR")
-              : data.createdAt 
-              ? new Date(data.createdAt).toLocaleDateString("ko-KR")
-              : "";
             
             history.push({
               id: doc.id,
@@ -57,10 +74,15 @@ export default function HomePage() {
               nickname: data.nickname,
               title: `${dateStr} ${config.title}`,
               icon: config.icon,
+              completedAt: data.completedAt || data.createdAt || Date.now(), // 정렬용
             });
           });
           
-          setSettlementHistory(history);
+          // 클라이언트 측에서 날짜순 정렬 (completedAt 기준, 내림차순)
+          history.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+          
+          // 최근 3개만 선택
+          setSettlementHistory(history.slice(0, 3));
         } catch (error) {
           console.error("정산 내역 조회 실패:", error);
           console.error("에러 상세:", {
