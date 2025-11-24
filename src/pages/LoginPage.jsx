@@ -4,19 +4,18 @@ import { useForm } from "../hooks/useForm";
 import { useNavigation } from "../hooks/useNavigation";
 import { useLocation } from "react-router-dom";
 import { text } from "../constants";
-import { isValidEmail } from "../utils/validation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, firestore } from "../config/firebase";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 export default function LoginPage() {
   const { navigate, goToSignup } = useNavigation();
   const location = useLocation();
   
   const { values, errors, handleChange, handleBlur, validate } = useForm(
-    { id: "", password: "" },
+    { nickname: "", password: "" },
     {
-      id: (value) => (!value ? "아이디를 입력해주세요" : null),
+      nickname: (value) => (!value ? "닉네임을 입력해주세요" : null),
       password: (value) => (!value ? "비밀번호를 입력해주세요" : null),
     }
   );
@@ -25,8 +24,29 @@ export default function LoginPage() {
     if (!validate()) return;
     
     try {
-      // Firebase Authentication으로 로그인 (비밀번호는 자동으로 해시 처리됨)
-      await signInWithEmailAndPassword(auth, values.id, values.password);
+      // Firestore에서 닉네임으로 사용자 찾기
+      const nickname = values.nickname.trim();
+      const usersRef = collection(firestore, "users");
+      const q = query(usersRef, where("nickname", "==", nickname));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        alert("등록되지 않은 닉네임입니다.");
+        return;
+      }
+      
+      // 첫 번째 사용자 문서 가져오기 (닉네임은 고유해야 함)
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data();
+      const email = userData.email;
+      
+      if (!email) {
+        alert("사용자 정보에 오류가 있습니다. 관리자에게 문의해주세요.");
+        return;
+      }
+      
+      // Firebase Authentication으로 로그인 (이메일과 비밀번호 사용)
+      await signInWithEmailAndPassword(auth, email, values.password);
       
       // 로그인 성공 시 returnTo가 있으면 그곳으로, 없으면 홈으로 이동
       const returnTo = location.state?.returnTo || "/";
@@ -35,14 +55,18 @@ export default function LoginPage() {
       console.error("로그인 실패:", error);
       let errorMessage = "로그인에 실패했습니다.";
       
-      if (error?.code === "auth/user-not-found") {
-        errorMessage = "등록되지 않은 이메일입니다.";
+      if (error?.code === "auth/api-key-not-valid") {
+        errorMessage = "Firebase API 키가 유효하지 않습니다. 관리자에게 문의해주세요.";
+      } else if (error?.code === "auth/user-not-found") {
+        errorMessage = "등록되지 않은 닉네임입니다.";
       } else if (error?.code === "auth/wrong-password") {
         errorMessage = "비밀번호가 올바르지 않습니다.";
       } else if (error?.code === "auth/invalid-email") {
-        errorMessage = "올바른 이메일 형식이 아닙니다.";
+        errorMessage = "사용자 정보에 오류가 있습니다. 관리자에게 문의해주세요.";
       } else if (error?.code === "auth/too-many-requests") {
         errorMessage = "너무 많은 시도가 있었습니다. 나중에 다시 시도해주세요.";
+      } else if (error?.code === "auth/operation-not-allowed") {
+        errorMessage = "이메일/비밀번호 로그인이 활성화되지 않았습니다. 관리자에게 문의해주세요.";
       } else if (error?.message) {
         errorMessage = `로그인 실패: ${error.message}`;
       }
@@ -60,12 +84,12 @@ export default function LoginPage() {
         >
           <Input
             type="text"
-            placeholder="아이디"
-            value={values.id}
-            onChange={(e) => handleChange("id", e.target.value)}
-            onBlur={() => handleBlur("id")}
-            error={!!errors.id}
-            errorMessage={errors.id}
+            placeholder="닉네임"
+            value={values.nickname}
+            onChange={(e) => handleChange("nickname", e.target.value)}
+            onBlur={() => handleBlur("nickname")}
+            error={!!errors.nickname}
+            errorMessage={errors.nickname}
             size="md"
             className="p-4"
           />
