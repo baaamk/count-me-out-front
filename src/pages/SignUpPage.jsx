@@ -13,8 +13,6 @@ export default function SignUpPage() {
   const { navigate, goToLogin } = useNavigation();
   const [isCheckingNickname, setIsCheckingNickname] = useState(false);
   const [isNicknameAvailable, setIsNicknameAvailable] = useState(null); // null: 미확인, true: 사용가능, false: 중복
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
-  const [isEmailAvailable, setIsEmailAvailable] = useState(null);
   
   const { values, errors, touched, handleChange, handleBlur, validate } = useForm(
     { nickname: "", email: "", password: "", confirmPassword: "" },
@@ -32,28 +30,6 @@ export default function SignUpPage() {
     }
   );
 
-  const handleEmailDuplicateCheck = async () => {
-    if (!isValidEmail(values.email)) {
-      alert("올바른 이메일을 입력해주세요");
-      setIsEmailAvailable(false);
-      return;
-    }
-    
-    setIsCheckingEmail(true);
-    try {
-      // Firebase Auth는 이메일 중복을 직접 확인할 수 없으므로, 
-      // 회원가입 시점에 확인됩니다. 여기서는 형식만 확인합니다.
-      setIsEmailAvailable(true);
-      alert("이메일 형식이 올바릅니다. 회원가입 시 중복이 자동으로 확인됩니다.");
-    } catch (error) {
-      console.error("이메일 확인 실패:", error);
-      setIsEmailAvailable(false);
-      alert("이메일 확인 중 오류가 발생했습니다.");
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  };
-
   const handleNicknameDuplicateCheck = async () => {
     if (!values.nickname || !values.nickname.trim()) {
       alert("닉네임을 입력해주세요");
@@ -70,9 +46,13 @@ export default function SignUpPage() {
     setIsCheckingNickname(true);
     try {
       const nickname = values.nickname.trim();
+      console.log("닉네임 중복 확인 시작:", nickname);
+      
       const usersRef = collection(firestore, "users");
       const q = query(usersRef, where("nickname", "==", nickname));
       const querySnapshot = await getDocs(q);
+      
+      console.log("쿼리 결과:", querySnapshot.empty ? "사용 가능" : "중복됨", querySnapshot.size);
       
       if (querySnapshot.empty) {
         setIsNicknameAvailable(true);
@@ -83,8 +63,26 @@ export default function SignUpPage() {
       }
     } catch (error) {
       console.error("닉네임 중복 확인 실패:", error);
+      console.error("에러 상세:", { 
+        code: error?.code, 
+        message: error?.message, 
+        stack: error?.stack 
+      });
+      
+      let errorMessage = "닉네임 확인 중 오류가 발생했습니다.";
+      
+      if (error?.code === "permission-denied") {
+        errorMessage = "닉네임 확인 권한이 없습니다. Firestore 보안 규칙을 확인해주세요.";
+      } else if (error?.code === "failed-precondition") {
+        errorMessage = "Firestore 인덱스가 필요합니다. 콘솔 오류 메시지의 링크를 클릭하여 인덱스를 생성해주세요.";
+      } else if (error?.code === "unavailable") {
+        errorMessage = "Firestore 서비스를 사용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+      } else if (error?.message) {
+        errorMessage = `닉네임 확인 실패: ${error.message}`;
+      }
+      
       setIsNicknameAvailable(false);
-      alert("닉네임 확인 중 오류가 발생했습니다. 다시 시도해주세요.");
+      alert(errorMessage);
     } finally {
       setIsCheckingNickname(false);
     }
@@ -159,10 +157,8 @@ export default function SignUpPage() {
       
       if (error?.code === "auth/email-already-in-use") {
         errorMessage = "이미 사용 중인 이메일입니다.";
-        setIsEmailAvailable(false);
       } else if (error?.code === "auth/invalid-email") {
         errorMessage = "올바른 이메일 형식이 아닙니다.";
-        setIsEmailAvailable(false);
       } else if (error?.code === "auth/weak-password") {
         errorMessage = "비밀번호가 너무 약합니다. 8자 이상, 영문과 숫자를 포함해주세요.";
       } else if (error?.code === "auth/network-request-failed") {
@@ -230,40 +226,17 @@ export default function SignUpPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-1 w-full">
-            <div className={`flex h-[51px] items-center justify-between p-4 rounded-xl w-full transition-colors ${
-              errors.email 
-                ? "bg-red-50 border border-red-500" 
-                : "bg-neutral-50 border border-[#e0e0e0]"
-            }`}>
-              <input
-                type="email"
-                placeholder="이메일"
-                value={values.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                onBlur={() => handleBlur("email")}
-                className={`flex-1 bg-transparent border-0 outline-none text-base text-[#1a1a1a] placeholder:text-gray-500 ${
-                  errors.email ? "text-red-900" : ""
-                }`}
-              />
-              <button
-                onClick={handleEmailDuplicateCheck}
-                disabled={isCheckingEmail || !values.email?.trim()}
-                className={`flex items-center justify-center px-3 py-2 rounded-lg shrink-0 transition-colors ${
-                  isCheckingEmail || !values.email?.trim()
-                    ? "bg-[#e6e6e6] text-gray-400 cursor-not-allowed"
-                    : "bg-[#f2f2f2] hover:bg-[#e6e6e6]"
-                }`}
-              >
-                <span className="font-medium text-xs text-[#4d4d4d]">
-                  {isCheckingEmail ? "확인중..." : "중복확인"}
-                </span>
-              </button>
-            </div>
-            {errors.email && (
-              <p className="text-xs text-red-500 px-1">{errors.email}</p>
-            )}
-          </div>
+          <Input
+            type="email"
+            placeholder="이메일"
+            value={values.email}
+            onChange={(e) => handleChange("email", e.target.value)}
+            onBlur={() => handleBlur("email")}
+            error={!!errors.email}
+            errorMessage={errors.email}
+            size="md"
+            className="p-4"
+          />
 
           <Input
             type="password"
