@@ -55,11 +55,6 @@ const firebaseConfig = {
 // Firebase 초기화
 const app = initializeApp(firebaseConfig);
 
-// 디버깅: databaseURL 확인
-console.log("Firebase databaseURL:", firebaseConfig.databaseURL);
-console.log("Firebase databaseURL 길이:", firebaseConfig.databaseURL?.length);
-console.log("Firebase databaseURL 끝:", firebaseConfig.databaseURL?.slice(-10));
-
 // Firebase 서비스 초기화
 export const auth = getAuth(app);
 export const firestore = getFirestore(app);

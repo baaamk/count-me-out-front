@@ -46,11 +46,15 @@ export default function SettlementMenuSelectionPage() {
         
         const safeItems = items.map(item => {
           // 각 메뉴 항목에 대한 참여자 정보 계산 (모든 참여자 포함, 방장도 포함)
+          const itemId = typeof item.id === 'number' ? item.id : Number(item.id);
           const participants = allParticipants.map((participant) => {
             const selectedIds = participant.selectedMenuIds;
             // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
             const isSelected = selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0
-              ? selectedIds.includes(item.id)
+              ? selectedIds.some(id => {
+                  const selectedId = typeof id === 'number' ? id : Number(id);
+                  return selectedId === itemId;
+                })
               : false;
             return {
               name: participant.nickname,
@@ -63,12 +67,25 @@ export default function SettlementMenuSelectionPage() {
           // completed: true인 참여자만 카운트 (확정한 참여자만, 방장 포함)
           const confirmedCount = completedParticipants.filter((p) => {
             const selectedIds = p.selectedMenuIds;
-            // null이거나 배열이 아니면 선택하지 않은 것으로 처리
-            if (!selectedIds || !Array.isArray(selectedIds)) {
+            // null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
               return false;
             }
-            return selectedIds.includes(item.id);
+            // 타입 일치 확인 (숫자로 변환하여 비교)
+            const menuId = typeof item.id === 'number' ? item.id : Number(item.id);
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
           }).length;
+          
+          // pricePerPerson 실시간 계산 (확정한 참여자 수 기반)
+          const calculatedPricePerPerson = confirmedCount > 0 
+            ? Math.floor((item.price || 0) / confirmedCount)
+            : undefined;
+          
+          // Firebase에 저장된 값이 있으면 우선 사용, 없으면 실시간 계산값 사용
+          const pricePerPerson = item.pricePerPerson ?? calculatedPricePerPerson;
           
           return {
             id: item.id || 0,
@@ -76,7 +93,7 @@ export default function SettlementMenuSelectionPage() {
             price: item.price || 0,
             quantity: item.quantity || 1,
             participantCount: confirmedCount > 0 ? confirmedCount : undefined, // 확정한 참여자만 카운트
-            pricePerPerson: item.pricePerPerson, // undefined일 수 있음 (참여자 선택 후 계산)
+            pricePerPerson: pricePerPerson, // 실시간 계산 또는 Firebase 저장값
             participants: participants, // 실시간 참여자 정보
           };
         });
@@ -202,15 +219,20 @@ export default function SettlementMenuSelectionPage() {
       
       menuItems.forEach((menuItem) => {
         // 이 메뉴를 선택한 참여자 수 계산 (completed: true인 참여자만)
-        // selectedMenuIds가 null이거나 배열이 아닌 경우 처리
+        // selectedMenuIds가 null이거나 배열이 아니거나 빈 배열인 경우 처리
+        const menuId = typeof menuItem.id === 'number' ? menuItem.id : Number(menuItem.id);
         const selectedParticipants = completedParticipants.filter(
           (p) => {
             const selectedIds = p.selectedMenuIds;
-            // null이거나 배열이 아니면 false
-            if (!selectedIds || !Array.isArray(selectedIds)) {
+            // null이거나 배열이 아니거나 빈 배열이면 false
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
               return false;
             }
-            return selectedIds.includes(menuItem.id);
+            // 타입 일치 확인 (숫자로 변환하여 비교)
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
           }
         ).length;
         

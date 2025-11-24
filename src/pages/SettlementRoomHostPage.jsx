@@ -56,13 +56,18 @@ export default function SettlementRoomHostPage() {
           const allParticipants = Object.values(data.participants || {});
           // completed: true인 참여자만 필터링 (방장 포함)
           const completedParticipants = allParticipants.filter(p => p.completed === true);
+          const menuId = typeof menuItem.id === 'number' ? menuItem.id : Number(menuItem.id);
           const selectedCount = completedParticipants.filter((p) => {
             const selectedIds = p.selectedMenuIds;
-            // null이거나 배열이 아니면 선택하지 않은 것으로 처리
-            if (!selectedIds || !Array.isArray(selectedIds)) {
+            // null이거나 배열이 아니거나 빈 배열이면 선택하지 않은 것으로 처리
+            if (!selectedIds || !Array.isArray(selectedIds) || selectedIds.length === 0) {
               return false;
             }
-            return selectedIds.includes(menuItem.id);
+            // 타입 일치 확인 (숫자로 변환하여 비교)
+            return selectedIds.some(id => {
+              const selectedId = typeof id === 'number' ? id : Number(id);
+              return selectedId === menuId;
+            });
           }).length;
           
           // Firebase에 저장된 값이 있으면 우선 사용, 없으면 실시간 계산값 사용
@@ -331,29 +336,23 @@ export default function SettlementRoomHostPage() {
                   </div>
                 </div>
 
-                {/* Participant Chips */}
-                <div className="flex gap-1.5 h-6 items-center shrink-0 w-full flex-wrap">
-                  {item.participants.map((participant, index) => (
-                    <div
-                      key={index}
-                      className={`flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 ${
-                        participant.isSelected
-                          ? "bg-[#e5f2ff]"
-                          : "bg-[#ffe5e5]"
-                      }`}
-                    >
-                      <p
-                        className={`font-medium text-[11px] whitespace-nowrap ${
-                          participant.isSelected
-                            ? "text-[#3366cc]"
-                            : "text-[#cc3333]"
-                        }`}
-                      >
-                        {participant.name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {/* Participant Chips - 선택한 참여자만 표시 */}
+                {item.participants && item.participants.length > 0 && (
+                  <div className="flex gap-1.5 h-6 items-center shrink-0 w-full flex-wrap">
+                    {item.participants
+                      .filter(participant => participant.isSelected) // 선택한 참여자만 필터링
+                      .map((participant, index) => (
+                        <div
+                          key={index}
+                          className="flex h-6 items-center justify-center px-2 py-1 rounded-xl shrink-0 bg-[#e5f2ff]"
+                        >
+                          <p className="font-medium text-[11px] whitespace-nowrap text-[#3366cc]">
+                            {participant.name}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
