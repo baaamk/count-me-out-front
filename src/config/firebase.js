@@ -7,16 +7,49 @@ import { getFirestore } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 
 // Firebase 설정
-// 프로젝트 ID: countmeout-21e99
+// 모든 설정값은 환경 변수에서 가져옵니다 (.env 파일)
+// 보안을 위해 하드코딩된 값은 사용하지 않습니다.
+
+const requiredEnvVars = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+
+// 필수 환경 변수 확인
+const envVarNames = {
+  apiKey: 'VITE_FIREBASE_API_KEY',
+  authDomain: 'VITE_FIREBASE_AUTH_DOMAIN',
+  databaseURL: 'VITE_FIREBASE_DATABASE_URL',
+  projectId: 'VITE_FIREBASE_PROJECT_ID',
+  storageBucket: 'VITE_FIREBASE_STORAGE_BUCKET',
+  messagingSenderId: 'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  appId: 'VITE_FIREBASE_APP_ID',
+};
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([key, value]) => !value)
+  .map(([key]) => envVarNames[key]);
+
+if (missingVars.length > 0) {
+  throw new Error(
+    `Firebase 설정 오류: 다음 환경 변수가 설정되지 않았습니다:\n${missingVars.join('\n')}\n\n.env 파일을 생성하고 필요한 환경 변수를 설정해주세요.`
+  );
+}
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBL1WIeuLWSs3ndccfENUCVwrZfOKajCM4",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "countmeout-21e99.firebaseapp.com",
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://countmeout-21e99-default-rtdb.asia-northeast3.firebasedatabase.app", // Realtime Database URL
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "countmeout-21e99",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "countmeout-21e99.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "49201492896",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:49201492896:web:91623f39b684c2cc872ac5",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-P738QD7N8X", // Analytics (선택사항)
+  apiKey: requiredEnvVars.apiKey,
+  authDomain: requiredEnvVars.authDomain,
+  databaseURL: requiredEnvVars.databaseURL,
+  projectId: requiredEnvVars.projectId,
+  storageBucket: requiredEnvVars.storageBucket,
+  messagingSenderId: requiredEnvVars.messagingSenderId,
+  appId: requiredEnvVars.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, // Analytics (선택사항)
 };
 
 // Firebase 초기화
@@ -28,7 +61,9 @@ export const firestore = getFirestore(app);
 export const functions = getFunctions(app);
 
 // Realtime Database 초기화
-export const database = getDatabase(app);
+// databaseURL을 명시적으로 전달하여 URL 잘림 문제 방지
+const databaseURL = firebaseConfig.databaseURL;
+export const database = getDatabase(app, databaseURL);
 
 export default app;
 
